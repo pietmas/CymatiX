@@ -1,0 +1,25 @@
+BasedOnStyle: LLVM
+IndentWidth: 4
+UseTab: Never
+
+BreakBeforeBraces: Allman
+AllowShortIfStatementsOnASingleLine: false
+AllowShortBlocksOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+
+
+# Force one argument per line
+BinPackArguments: false
+BinPackParameters: false
+AllowAllArgumentsOnNextLine: false
+AllowAllParametersOfDeclarationOnNextLine: false
+
+
+# Avoid weird horizontal alignment
+AlignAfterOpenBracket: BlockIndent
+ContinuationIndentWidth: 4
+
+# Put the opening '(' on the next line when breaking
+PenaltyBreakBeforeFirstCallParameter: 0
+
+ColumnLimit: 100

@@ -1,0 +1,21 @@
+# Build output
+build/
+
+# Compiled binary
+cymatics
+
+# Compiled shaders
+shaders/compiled/
+*.spv
+
+# PDF (tutorial reference, not project source)
+vulkan_tutorial_en.pdf
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
