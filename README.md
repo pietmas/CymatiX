@@ -1,6 +1,6 @@
 # CymatiX
 
-Real-time cymatics visualizer — transforms audio into GPU-rendered wave patterns using Vulkan.
+Real-time cymatics visualizer - transforms audio into GPU-rendered wave patterns using Vulkan.
 
 ![demo](media/cymatix.gif)
 
@@ -8,8 +8,8 @@ Real-time cymatics visualizer — transforms audio into GPU-rendered wave patter
 
 ## Visual styles
 
-- **Wave Interference** — ripple patterns driven by bass, mid, and treble bands
-- **Lissajous** — frequency-ratio curves traced in real time from the audio spectrum
+- **Wave Interference** - ripple patterns driven by bass, mid, and treble bands
+- **Lissajous** - frequency-ratio curves traced in real time from the audio spectrum
 
 ---
 
@@ -31,6 +31,12 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 cmake --build .
 ./cymatics
 ```
+
+---
+
+## What's next
+
+Plugin architecture for swappable visual styles, Chladni figures, another palette, an ImGui UI for live parameter tweaking, and eventually microphone and loopback input.
 
 ---
 
