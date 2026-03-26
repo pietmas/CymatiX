@@ -42,7 +42,7 @@ Plugin architecture for swappable visual styles, Chladni figures, another palett
 
 ## Vulkan
 
-The rendering backend is built on raw Vulkan following the [Vulkan Tutorial](https://docs.vulkan.org/tutorial/latest/00_Introduction.html).
+The rendering backend is built on raw Vulkan following the [Vulkan Tutorial](https://vulkan-tutorial.com/).
 
 ---
 
