@@ -3,7 +3,6 @@
 #include <visuals/LissajousStyle.h>
 #include <visuals/WaveInterferenceStyle.h>
 
-#define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
 #include <cstdio>
@@ -66,7 +65,7 @@ void App::mainLoop()
         drawFrame();
     }
 
-    vkDeviceWaitIdle(m_context->getDevice());
+    m_context->getDevice().waitIdle();
 }
 
 // load audio file, start FFT processor
@@ -117,25 +116,6 @@ void App::update()
     float dt = now - m_lastFrameTime;
     m_lastFrameTime = now;
 
-    // update title with frame/fps once per second
-    /*m_fpsAccum += dt;
-    m_fpsSamples++;
-    if (m_fpsAccum >= 1.0f)
-    {
-        float fps = (float)m_fpsSamples / m_fpsAccum;
-        char title[64];
-        snprintf(
-            title,
-            sizeof(title),
-            "CymatiX  |  frame %-6d  |  %.1f fps",
-            m_debugFrameCount,
-            fps
-        );
-        glfwSetWindowTitle(m_window, title);
-        m_fpsAccum = 0.0f;
-        m_fpsSamples = 0;
-    }*/
-
     auto mags = m_fftProcessor->getMagnitudes();
 
     // EMA smoothing on FFT
@@ -152,15 +132,15 @@ void App::update()
     m_debugFrameCount++;
     if (m_debugFrameCount % 60 == 0 && m_audioEngine->isPlaying())
     {
-        auto mags = m_fftProcessor->getMagnitudes();
+        auto mags2 = m_fftProcessor->getMagnitudes();
         int peakBin = 1;
         float peakMag = 0.0f;
 
-        for (int i = 1; i < (int)mags.size(); i++) // skip bin 0
+        for (int i = 1; i < (int)mags2.size(); i++) // skip bin 0
         {
-            if (mags[i] > peakMag)
+            if (mags2[i] > peakMag)
             {
-                peakMag = mags[i];
+                peakMag = mags2[i];
                 peakBin = i;
             }
         }
@@ -178,7 +158,7 @@ void App::shutdown()
     m_fftProcessor.reset();
     m_audioEngine.reset();
 
-    // style owns VkPipeline, VkBuffer, VkDescriptorSet
+    // style owns pipeline, buffers, descriptor sets
     m_activeStyle.reset();
 
     m_sync->destroy(*m_context);
@@ -201,86 +181,81 @@ void App::recreateSwapchain()
 // record + submit one frame
 void App::drawFrame()
 {
-    VkFence fence = m_sync->getInFlightFence(m_currentFrame);
-    VK_CHECK(vkWaitForFences(m_context->getDevice(), 1, &fence, VK_TRUE, UINT64_MAX));
+    const vk::raii::Device &device = m_context->getDevice();
+    vk::Fence fence = m_sync->getInFlightFence(m_currentFrame);
 
+    // wait for this frame's fence -- returns vk::Result (eSuccess or eTimeout)
+    (void)device.waitForFences({fence}, vk::True, UINT64_MAX);
+
+    // acquire next image -- eErrorOutOfDateKHR throws, eSuboptimalKHR is in .first
     uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(
-        m_context->getDevice(),
-        m_swapchain->getSwapchain(),
-        UINT64_MAX,
-        m_sync->getImageAvailableSemaphore(m_currentFrame),
-        VK_NULL_HANDLE,
-        &imageIndex
-    );
-
-    if (result == VK_ERROR_OUT_OF_DATE_KHR)
+    try
+    {
+        auto [result, idx] = m_swapchain->getSwapchainRaii().acquireNextImage(
+            UINT64_MAX,
+            m_sync->getImageAvailableSemaphore(m_currentFrame),
+            nullptr
+        );
+        if (result == vk::Result::eSuboptimalKHR)
+        {
+            m_framebufferResized = true;
+        }
+        imageIndex = idx;
+    }
+    catch (vk::OutOfDateKHRError &)
     {
         recreateSwapchain();
         return;
     }
 
-    vkResetFences(m_context->getDevice(), 1, &fence);
+    device.resetFences({fence});
 
-    VkCommandBuffer cmd = m_commandPool->getBuffer(m_currentFrame);
-    vkResetCommandBuffer(cmd, 0);
+    vk::CommandBuffer cmd = m_commandPool->getBuffer(m_currentFrame);
+    cmd.reset({});
 
     // record commands
-    VkCommandBufferBeginInfo beginInfo{};
-    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    vk::CommandBufferBeginInfo beginInfo{};
+    cmd.begin(beginInfo);
 
-    if (vkBeginCommandBuffer(cmd, &beginInfo) != VK_SUCCESS)
-    {
-        fprintf(stderr, "failed to begin command buffer\n");
-        abort();
-    }
+    vk::ClearValue clearColor{vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}}};
 
-    VkClearValue clearColor = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
-
-    VkRenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    vk::RenderPassBeginInfo renderPassInfo{};
     renderPassInfo.renderPass = m_renderPass->get();
     renderPassInfo.framebuffer = m_swapchain->getFramebuffers()[imageIndex];
-    renderPassInfo.renderArea.offset = {0, 0};
+    renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
     renderPassInfo.renderArea.extent = m_swapchain->getExtent();
     renderPassInfo.clearValueCount = 1;
     renderPassInfo.pClearValues = &clearColor;
 
-    vkCmdBeginRenderPass(cmd, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
 
     // viewport + scissor to match swapchain extent
-    VkViewport viewport{};
+    vk::Viewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
     viewport.width = (float)m_swapchain->getExtent().width;
     viewport.height = (float)m_swapchain->getExtent().height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
-    vkCmdSetViewport(cmd, 0, 1, &viewport);
+    cmd.setViewport(0, {viewport});
 
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
+    vk::Rect2D scissor{};
+    scissor.offset = vk::Offset2D{0, 0};
     scissor.extent = m_swapchain->getExtent();
-    vkCmdSetScissor(cmd, 0, 1, &scissor);
+    cmd.setScissor(0, {scissor});
 
     // delegate to active style
     m_activeStyle->render(cmd, (uint32_t)m_currentFrame);
 
-    vkCmdEndRenderPass(cmd);
-
-    if (vkEndCommandBuffer(cmd) != VK_SUCCESS)
-    {
-        fprintf(stderr, "failed to record command buffer\n");
-        abort();
-    }
+    cmd.endRenderPass();
+    cmd.end();
 
     // submit to graphics queue
-    VkSemaphore waitSemaphores[] = {m_sync->getImageAvailableSemaphore(m_currentFrame)};
-    VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    VkSemaphore signalSemaphores[] = {m_sync->getRenderFinishedSemaphore(imageIndex)};
+    vk::Semaphore waitSemaphores[] = {m_sync->getImageAvailableSemaphore(m_currentFrame)};
+    vk::PipelineStageFlags waitStages[] = {vk::PipelineStageFlagBits::eColorAttachmentOutput};
+    vk::Semaphore signalSemaphores[] = {m_sync->getRenderFinishedSemaphore(imageIndex)};
 
-    VkSubmitInfo submitInfo{};
-    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    vk::SubmitInfo submitInfo{};
     submitInfo.waitSemaphoreCount = 1;
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
@@ -289,26 +264,28 @@ void App::drawFrame()
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    if (vkQueueSubmit(m_context->getGraphicsQueue(), 1, &submitInfo, fence) != VK_SUCCESS)
-    {
-        fprintf(stderr, "failed to submit draw command buffer\n");
-        abort();
-    }
+    m_context->getGraphicsQueue().submit({submitInfo}, fence);
 
-    // present image
-    VkSwapchainKHR swapchains[] = {m_swapchain->getSwapchain()};
+    // present image -- eErrorOutOfDateKHR throws, eSuboptimalKHR is in result
+    vk::SwapchainKHR swapchains[] = {m_swapchain->getSwapchain()};
 
-    VkPresentInfoKHR presentInfo{};
-    presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+    vk::PresentInfoKHR presentInfo{};
     presentInfo.waitSemaphoreCount = 1;
     presentInfo.pWaitSemaphores = signalSemaphores;
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapchains;
     presentInfo.pImageIndices = &imageIndex;
 
-    result = vkQueuePresentKHR(m_context->getPresentQueue(), &presentInfo);
-
-    if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_framebufferResized)
+    try
+    {
+        vk::Result result = m_context->getPresentQueue().presentKHR(presentInfo);
+        if (result == vk::Result::eSuboptimalKHR || m_framebufferResized)
+        {
+            m_framebufferResized = false;
+            recreateSwapchain();
+        }
+    }
+    catch (vk::OutOfDateKHRError &)
     {
         m_framebufferResized = false;
         recreateSwapchain();
@@ -330,8 +307,8 @@ void App::run()
 // GLFW resize callback
 void App::framebufferResizeCallback(GLFWwindow *window, int width, int height)
 {
-    (void)width;
-    (void)height;
+    width;
+    height;
     auto *app = reinterpret_cast<App *>(glfwGetWindowUserPointer(window));
     app->m_framebufferResized = true;
 }

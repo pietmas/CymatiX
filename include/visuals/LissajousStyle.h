@@ -5,7 +5,8 @@
 #include <palette/IPalette.h>
 #include <visuals/IVisualStyle.h>
 
-#include <vulkan/vulkan.h>
+#include <vector>
+#include <vulkan/vulkan_raii.hpp>
 
 namespace rhi
 {
@@ -22,8 +23,8 @@ class LissajousStyle : public IVisualStyle
 
     LissajousStyle(
         const rhi::VulkanContext &ctx,
-        VkRenderPass renderPass,
-        VkExtent2D extent,
+        vk::RenderPass renderPass,
+        vk::Extent2D extent,
         const palette::IPalette &palette
     );
     ~LissajousStyle() override;
@@ -34,45 +35,43 @@ class LissajousStyle : public IVisualStyle
     LissajousStyle &operator=(LissajousStyle &&) = delete;
 
     void update(const float *magnitudes, uint32_t count, float deltaTime) override;
-    void render(VkCommandBuffer cmd, uint32_t frameIndex) override;
-    void onResize(VkExtent2D newExtent) override;
+    void render(vk::CommandBuffer cmd, uint32_t frameIndex) override;
+    void onResize(vk::Extent2D newExtent) override;
 
   private:
     void createDescriptorSetLayout();
     void createDescriptorPool();
-    void createPipeline(VkRenderPass renderPass);
+    void createPipeline(vk::RenderPass renderPass);
     void createUBOBuffers();
     void createVertexBuffer();
     void createDescriptorSets(const palette::IPalette &palette);
 
     const rhi::VulkanContext &m_ctx;
-    VkExtent2D m_extent;
+    vk::Extent2D m_extent;
 
-    VkDescriptorSetLayout m_descriptorSetLayout = VK_NULL_HANDLE;
-    VkDescriptorPool m_descriptorPool = VK_NULL_HANDLE;
-    VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
-    VkPipeline m_pipeline = VK_NULL_HANDLE;
+    vk::raii::DescriptorSetLayout m_descriptorSetLayout{nullptr};
+    vk::raii::DescriptorPool m_descriptorPool{nullptr};
+    vk::raii::PipelineLayout m_pipelineLayout{nullptr};
+    vk::raii::Pipeline m_pipeline{nullptr};
 
     // per-frame spectrum UBOs (written every frame)
-    VkBuffer m_spectrumUBOBuffers[Config::MAX_FRAMES_IN_FLIGHT];
-    VkDeviceMemory m_spectrumUBOMemory[Config::MAX_FRAMES_IN_FLIGHT];
-    void *m_spectrumMapped[Config::MAX_FRAMES_IN_FLIGHT];
+    std::vector<vk::raii::Buffer> m_spectrumUBOBuffers;
+    std::vector<vk::raii::DeviceMemory> m_spectrumUBOMemory;
+    void *m_spectrumMapped[Config::MAX_FRAMES_IN_FLIGHT]{};
 
     // per-frame palette UBOs (written once at init)
-    VkBuffer m_paletteUBOBuffers[Config::MAX_FRAMES_IN_FLIGHT];
-    VkDeviceMemory m_paletteUBOMemory[Config::MAX_FRAMES_IN_FLIGHT];
-    void *m_paletteMapped[Config::MAX_FRAMES_IN_FLIGHT];
+    std::vector<vk::raii::Buffer> m_paletteUBOBuffers;
+    std::vector<vk::raii::DeviceMemory> m_paletteUBOMemory;
+    void *m_paletteMapped[Config::MAX_FRAMES_IN_FLIGHT]{};
 
-    // single host-visible vertex buffer - safe to share across frames for fence
-    VkBuffer m_vertexBuffer = VK_NULL_HANDLE;
-    VkDeviceMemory m_vertexBufferMemory = VK_NULL_HANDLE;
+    // single host-visible vertex buffer -- shared across frames (fence ensures safety)
+    vk::raii::Buffer m_vertexBuffer{nullptr};
+    vk::raii::DeviceMemory m_vertexBufferMemory{nullptr};
     void *m_vertexMapped = nullptr;
 
-    VkDescriptorSet m_descriptorSets[Config::MAX_FRAMES_IN_FLIGHT];
+    std::vector<vk::raii::DescriptorSet> m_descriptorSets;
 
-    // spectrum data assembled in update, uploaded to UBO in render
     SpectrumUBOData m_pendingSpectrum{};
-
     float m_time = 0.0f;
 };
 

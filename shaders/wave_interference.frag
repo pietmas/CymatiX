@@ -2,9 +2,11 @@
 
 layout(set = 0, binding = 0) uniform SpectrumUBO
 {
-    float magnitudes[1024];
+    vec4 magnitudes[256]; // 256 vec4s = 1024 floats, correct std140 stride
     float time;
-    float _pad[3];
+    float _pad0;
+    float _pad1;
+    float _pad2;
 }
 ubo;
 
@@ -12,7 +14,9 @@ layout(set = 0, binding = 1) uniform PaletteUBO
 {
     vec4 colors[8];
     int numStops;
-    float _pad[3];
+    float _pad0;
+    float _pad1;
+    float _pad2;
 }
 palette;
 
@@ -44,7 +48,7 @@ float avgBins(int lo, int hi)
 {
     float sum = 0.0;
     for (int i = lo; i <= hi; i++)
-        sum += ubo.magnitudes[i];
+        sum += ubo.magnitudes[i / 4][i % 4]; // magnitudes is vec4[256], index float by (vec,component)
     return sum / float(hi - lo + 1);
 }
 

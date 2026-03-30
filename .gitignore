@@ -8,8 +8,10 @@ cymatics
 shaders/compiled/
 *.spv
 
-# PDF (tutorial reference, not project source)
-vulkan_tutorial_en.pdf
+# tutorial material
+tutorial/
+tutorial/*.md
+
 
 # IDE / editor
 .vscode/

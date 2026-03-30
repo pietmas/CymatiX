@@ -1,9 +1,8 @@
 #pragma once
 
 #include <app/Config.h>
-#include <array>
 #include <vector>
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_raii.hpp>
 
 namespace rhi
 {
@@ -25,26 +24,26 @@ class Sync
     void destroy(const VulkanContext &ctx);
 
     // indexed by currentFrame
-    VkSemaphore getImageAvailableSemaphore(int frame) const
+    vk::Semaphore getImageAvailableSemaphore(int frame) const
     {
-        return m_imageAvailableSemaphores[frame];
+        return *m_imageAvailableSemaphores[frame];
     }
-    // indexed by imageIndex returned from vkAcquireNextImageKHR
-    VkSemaphore getRenderFinishedSemaphore(uint32_t imageIndex) const
+    // indexed by imageIndex returned from acquireNextImageKHR
+    vk::Semaphore getRenderFinishedSemaphore(uint32_t imageIndex) const
     {
-        return m_renderFinishedSemaphores[imageIndex];
+        return *m_renderFinishedSemaphores[imageIndex];
     }
-    VkFence getInFlightFence(int frame) const
+    vk::Fence getInFlightFence(int frame) const
     {
-        return m_inFlightFences[frame];
+        return *m_inFlightFences[frame];
     }
 
   private:
-    // one per frame in flight - used before we know which image we'll get
-    std::array<VkSemaphore, Config::MAX_FRAMES_IN_FLIGHT> m_imageAvailableSemaphores;
+    // one per frame in flight
+    std::vector<vk::raii::Semaphore> m_imageAvailableSemaphores;
     // one per swapchain image
-    std::vector<VkSemaphore> m_renderFinishedSemaphores;
-    std::array<VkFence, Config::MAX_FRAMES_IN_FLIGHT> m_inFlightFences;
+    std::vector<vk::raii::Semaphore> m_renderFinishedSemaphores;
+    std::vector<vk::raii::Fence> m_inFlightFences;
 };
 
 } // namespace rhi

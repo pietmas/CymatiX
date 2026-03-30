@@ -5,10 +5,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# ─── Vulkan ───────────────────────────────────────────────────────────────────
+# Vulkan
 find_package(Vulkan REQUIRED)
 
-# ─── Third-party via FetchContent ─────────────────────────────────────────────
+# Third-party via FetchContent 
 include(FetchContent)
 
 # GLFW
@@ -17,7 +17,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/glfw/glfw.git
     GIT_TAG        3.4
 )
-set(GLFW_BUILD_DOCS     OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS    OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(glfw)
@@ -50,18 +50,18 @@ FetchContent_Declare(
     GIT_TAG        131.1.0
     GIT_SHALLOW    TRUE
 )
-set(KISSFFT_DATATYPE  "float" CACHE STRING "" FORCE)
-set(KISSFFT_STATIC    ON      CACHE BOOL   "" FORCE)
-set(KISSFFT_TEST      OFF     CACHE BOOL   "" FORCE)
-set(KISSFFT_TOOLS     OFF     CACHE BOOL   "" FORCE)
-set(KISSFFT_PKGCONFIG OFF     CACHE BOOL   "" FORCE)
-set(KISSFFT_INSTALL   OFF     CACHE BOOL   "" FORCE)
+set(KISSFFT_DATATYPE "float" CACHE STRING "" FORCE)
+set(KISSFFT_STATIC  ON  CACHE BOOL  "" FORCE)
+set(KISSFFT_TEST    OFF CACHE BOOL  "" FORCE)
+set(KISSFFT_TOOLS   OFF CACHE BOOL  "" FORCE)
+set(KISSFFT_PKGCONFIG   OFF CACHE BOOL  "" FORCE)
+set(KISSFFT_INSTALL     OFF CACHE BOOL  "" FORCE)
 FetchContent_MakeAvailable(kissfft)
 
-# ─── Shaders ──────────────────────────────────────────────────────────────────
+# Shaders
 include(cmake/CompileShaders.cmake)
 
-# ─── Sources ──────────────────────────────────────────────────────────────────
+#  Sources 
 add_executable(cymatics
     src/main.cpp
     src/app/App.cpp
@@ -79,11 +79,11 @@ add_executable(cymatics
 )
 
 set_target_properties(cymatics PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY                ${CMAKE_SOURCE_DIR}
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG          ${CMAKE_SOURCE_DIR}
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE        ${CMAKE_SOURCE_DIR}
+    RUNTIME_OUTPUT_DIRECTORY    ${CMAKE_SOURCE_DIR}
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG  ${CMAKE_SOURCE_DIR}
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE    ${CMAKE_SOURCE_DIR}
     RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_SOURCE_DIR}
-    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL     ${CMAKE_SOURCE_DIR}
+    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_SOURCE_DIR}
 )
 
 target_include_directories(cymatics PRIVATE
@@ -104,14 +104,14 @@ if(UNIX)
     target_link_libraries(cymatics PRIVATE dl pthread)
 endif()
 
-# bake the absolute shader path in at compile time so the binary finds shaders
-# regardless of working directory or build config subfolder
+# absolute shader path in at compile time 
+# 
 target_compile_definitions(cymatics PRIVATE
     "SHADER_DIR=\"${CMAKE_SOURCE_DIR}/shaders/compiled\""
+    VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 )
 
 if(WIN32)
-    # prevent windows.h from defining min/max macros that clash with std
     target_compile_definitions(cymatics PRIVATE
         NOMINMAX
         WIN32_LEAN_AND_MEAN

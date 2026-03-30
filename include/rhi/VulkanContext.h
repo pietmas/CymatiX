@@ -4,18 +4,11 @@
 #include <cstdlib>
 #include <optional>
 #include <vector>
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_raii.hpp>
 
-#define VK_CHECK(call)                                                                             \
-    do                                                                                             \
-    {                                                                                              \
-        VkResult _res = (call);                                                                    \
-        if (_res != VK_SUCCESS)                                                                    \
-        {                                                                                          \
-            fprintf(stderr, "[VK_CHECK] %s returned %d\n", #call, (int)_res);                      \
-            abort();                                                                               \
-        }                                                                                          \
-    } while (0)
+// exceptions throw on failure; VK_CHECK just evaluates (kept for callsites that
+// havent been cleaned up yet and for the GLFW surface raw-C check)
+#define VK_CHECK(call) (void)(call)
 
 struct GLFWwindow;
 
@@ -35,9 +28,9 @@ struct QueueFamilyIndices
 
 struct SwapchainSupportDetails
 {
-    VkSurfaceCapabilitiesKHR capabilities;
-    std::vector<VkSurfaceFormatKHR> formats;
-    std::vector<VkPresentModeKHR> presentModes; // FIFO, MAILBOX, IMMEDIATE
+    vk::SurfaceCapabilitiesKHR capabilities;
+    std::vector<vk::SurfaceFormatKHR> formats;
+    std::vector<vk::PresentModeKHR> presentModes; // FIFO, MAILBOX, IMMEDIATE
 };
 
 class VulkanContext
@@ -54,36 +47,41 @@ class VulkanContext
     void init(GLFWwindow *window);
     void destroy();
 
-    VkInstance getInstance() const
-    {
-        return m_instance;
-    }
-    VkSurfaceKHR getSurface() const
-    {
-        return m_surface;
-    }
-    VkPhysicalDevice getPhysicalDevice() const
-    {
-        return m_physicalDevice;
-    }
-    VkDevice getDevice() const
+    // return const ref to raii device -- callers use it to create raii resources
+    const vk::raii::Device &getDevice() const
     {
         return m_device;
     }
-    VkQueue getGraphicsQueue() const
+    // raw physical device handle -- sufficient for getMemoryProperties etc.
+    vk::PhysicalDevice getPhysicalDevice() const
     {
-        return m_graphicsQueue;
+        return *m_physicalDevice;
     }
-    VkQueue getPresentQueue() const
+    vk::SurfaceKHR getSurface() const
     {
-        return m_presentQueue;
+        return *m_surface;
+    }
+    vk::Queue getGraphicsQueue() const
+    {
+        return *m_graphicsQueue;
+    }
+    vk::Queue getPresentQueue() const
+    {
+        return *m_presentQueue;
     }
     const QueueFamilyIndices &getQueueFamilyIndices() const
     {
         return m_queueFamilyIndices;
     }
 
-    SwapchainSupportDetails querySwapchainSupport(VkPhysicalDevice device) const;
+    SwapchainSupportDetails querySwapchainSupport(vk::PhysicalDevice device) const;
+
+    static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
+        vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+        vk::DebugUtilsMessageTypeFlagsEXT messageType,
+        const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData,
+        void *pUserData
+    );
 
   private:
     void createInstance();
@@ -92,29 +90,22 @@ class VulkanContext
     void pickPhysicalDevice();
     void createLogicalDevice();
 
-    bool isDeviceSuitable(VkPhysicalDevice device) const;
-    int rateDeviceSuitability(VkPhysicalDevice device) const;
-    bool checkDeviceExtensionSupport(VkPhysicalDevice device) const;
-    QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device) const;
-
+    bool isDeviceSuitable(vk::PhysicalDevice device) const;
+    int rateDeviceSuitability(vk::PhysicalDevice device) const;
+    bool checkDeviceExtensionSupport(vk::PhysicalDevice device) const;
+    QueueFamilyIndices findQueueFamilies(vk::PhysicalDevice device) const;
     bool checkValidationLayerSupport() const;
     std::vector<const char *> getRequiredExtensions() const;
 
-  public:
-    static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-        VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-        VkDebugUtilsMessageTypeFlagsEXT messageType,
-        const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
-        void *pUserData
-    );
-
-    VkInstance m_instance = VK_NULL_HANDLE;
-    VkDebugUtilsMessengerEXT m_debugMessenger = VK_NULL_HANDLE;
-    VkSurfaceKHR m_surface = VK_NULL_HANDLE;
-    VkPhysicalDevice m_physicalDevice = VK_NULL_HANDLE; // not owned
-    VkDevice m_device = VK_NULL_HANDLE;
-    VkQueue m_graphicsQueue = VK_NULL_HANDLE;
-    VkQueue m_presentQueue = VK_NULL_HANDLE;
+    // m_raiiContext must be first -- it owns the dynamic loader used by all raii objects
+    vk::raii::Context m_raiiContext;
+    vk::raii::Instance m_instance{nullptr};
+    vk::raii::DebugUtilsMessengerEXT m_debugMessenger{nullptr};
+    vk::raii::SurfaceKHR m_surface{nullptr};
+    vk::raii::PhysicalDevice m_physicalDevice{nullptr};
+    vk::raii::Device m_device{nullptr};
+    vk::raii::Queue m_graphicsQueue{nullptr};
+    vk::raii::Queue m_presentQueue{nullptr};
 
     QueueFamilyIndices m_queueFamilyIndices;
 

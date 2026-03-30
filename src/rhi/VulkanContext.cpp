@@ -11,47 +11,15 @@
 namespace rhi
 {
 
-// not in core load manually
-static VkResult CreateDebugUtilsMessengerEXT(
-    VkInstance instance,
-    const VkDebugUtilsMessengerCreateInfoEXT *pCreateInfo,
-    const VkAllocationCallbacks *pAllocator,
-    VkDebugUtilsMessengerEXT *pDebugMessenger
-)
-{
-    auto func = (PFN_vkCreateDebugUtilsMessengerEXT
-    )vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
-    if (func != nullptr)
-    {
-        return func(instance, pCreateInfo, pAllocator, pDebugMessenger);
-    }
-    return VK_ERROR_EXTENSION_NOT_PRESENT;
-}
-
-static void DestroyDebugUtilsMessengerEXT(
-    VkInstance instance,
-    VkDebugUtilsMessengerEXT debugMessenger,
-    const VkAllocationCallbacks *pAllocator
-)
-{
-    auto func = (PFN_vkDestroyDebugUtilsMessengerEXT
-    )vkGetInstanceProcAddr(instance, "vkDestroyDebugUtilsMessengerEXT");
-    if (func != nullptr)
-    {
-        func(instance, debugMessenger, pAllocator);
-    }
-}
-
 // fill debug messenger create info
-static void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT &createInfo)
+static void populateDebugMessengerCreateInfo(vk::DebugUtilsMessengerCreateInfoEXT &createInfo)
 {
-    createInfo = {};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                                 VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-    createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-                             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-                             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+    createInfo = vk::DebugUtilsMessengerCreateInfoEXT{};
+    createInfo.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+                                 vk::DebugUtilsMessageSeverityFlagBitsEXT::eError;
+    createInfo.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+                             vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation |
+                             vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance;
     createInfo.pfnUserCallback = VulkanContext::debugCallback;
 }
 
@@ -65,18 +33,16 @@ void VulkanContext::init(GLFWwindow *window)
     createLogicalDevice();
 }
 
-// destroy in reverse order
+// destroy in reverse order -- raii handles destruction when reset to nullptr
 void VulkanContext::destroy()
 {
-    vkDestroyDevice(m_device, nullptr);
-
-    if (m_enableValidationLayers)
-    {
-        DestroyDebugUtilsMessengerEXT(m_instance, m_debugMessenger, nullptr);
-    }
-
-    vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
-    vkDestroyInstance(m_instance, nullptr);
+    m_presentQueue = nullptr;
+    m_graphicsQueue = nullptr;
+    m_device = nullptr;
+    m_physicalDevice = nullptr;
+    m_surface = nullptr;
+    m_debugMessenger = nullptr;
+    m_instance = nullptr;
 }
 
 // VkInstance + validation layers + required extensions
@@ -88,8 +54,7 @@ void VulkanContext::createInstance()
         abort();
     }
 
-    VkApplicationInfo appInfo{};
-    appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+    vk::ApplicationInfo appInfo{};
     appInfo.pApplicationName = "CymatiX";
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "No Engine";
@@ -98,13 +63,12 @@ void VulkanContext::createInstance()
 
     auto extensions = getRequiredExtensions();
 
-    VkInstanceCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+    vk::InstanceCreateInfo createInfo{};
     createInfo.pApplicationInfo = &appInfo;
     createInfo.enabledExtensionCount = (uint32_t)extensions.size();
     createInfo.ppEnabledExtensionNames = extensions.data();
 
-    VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
+    vk::DebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
     if (m_enableValidationLayers)
     {
         createInfo.enabledLayerCount = (uint32_t)m_validationLayers.size();
@@ -118,7 +82,7 @@ void VulkanContext::createInstance()
         createInfo.pNext = nullptr;
     }
 
-    VK_CHECK(vkCreateInstance(&createInfo, nullptr, &m_instance));
+    m_instance = vk::raii::Instance(m_raiiContext, createInfo);
 }
 
 // debug messenger routes validation output to console
@@ -129,32 +93,39 @@ void VulkanContext::setupDebugMessenger()
         return;
     }
 
-    VkDebugUtilsMessengerCreateInfoEXT createInfo{};
+    vk::DebugUtilsMessengerCreateInfoEXT createInfo{};
     populateDebugMessengerCreateInfo(createInfo);
 
-    VK_CHECK(CreateDebugUtilsMessengerEXT(m_instance, &createInfo, nullptr, &m_debugMessenger));
+    m_debugMessenger = m_instance.createDebugUtilsMessengerEXT(createInfo);
 }
 
-// GLFW creates window surface
+// GLFW creates window surface, wrap result in raii handle
 void VulkanContext::createSurface(GLFWwindow *window)
 {
-    VK_CHECK(glfwCreateWindowSurface(m_instance, window, nullptr, &m_surface));
+    VkSurfaceKHR rawSurface;
+    VkResult res =
+        glfwCreateWindowSurface(static_cast<VkInstance>(*m_instance), window, nullptr, &rawSurface);
+    if (res != VK_SUCCESS)
+    {
+        fprintf(stderr, "failed to create window surface\n");
+        abort();
+    }
+    m_surface = vk::raii::SurfaceKHR(m_instance, rawSurface);
 }
 
 // score device for selection
-int VulkanContext::rateDeviceSuitability(VkPhysicalDevice device) const
+int VulkanContext::rateDeviceSuitability(vk::PhysicalDevice device) const
 {
-    VkPhysicalDeviceProperties props;
-    vkGetPhysicalDeviceProperties(device, &props);
+    vk::PhysicalDeviceProperties props = device.getProperties();
 
     int score = 0;
 
     // discrete > integrated
-    if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+    if (props.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
     {
         score += 1000;
     }
-    else if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+    else if (props.deviceType == vk::PhysicalDeviceType::eIntegratedGpu)
     {
         score += 100;
     }
@@ -170,34 +141,30 @@ int VulkanContext::rateDeviceSuitability(VkPhysicalDevice device) const
 // rate all devices, pick highest score
 void VulkanContext::pickPhysicalDevice()
 {
-    uint32_t deviceCount = 0;
-    vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr);
+    vk::raii::PhysicalDevices devices(m_instance);
 
-    if (deviceCount == 0)
+    if (devices.empty())
     {
         fprintf(stderr, "no GPUs with Vulkan support found\n");
         abort();
     }
 
-    std::vector<VkPhysicalDevice> devices(deviceCount);
-    vkEnumeratePhysicalDevices(m_instance, &deviceCount, devices.data());
+    // score -> index into devices
+    std::map<int, uint32_t> candidates;
 
-    // score -> device
-    std::map<int, VkPhysicalDevice> candidates;
-
-    for (const auto &device : devices)
+    for (uint32_t i = 0; i < (uint32_t)devices.size(); i++)
     {
-        if (!isDeviceSuitable(device))
+        vk::PhysicalDevice dev = *devices[i];
+        if (!isDeviceSuitable(dev))
         {
             continue;
         }
-        int score = rateDeviceSuitability(device);
+        int score = rateDeviceSuitability(dev);
 
-        VkPhysicalDeviceProperties props;
-        vkGetPhysicalDeviceProperties(device, &props);
-        fprintf(stdout, "[GPU] candidate: %s (score %d)\n", props.deviceName, score);
+        vk::PhysicalDeviceProperties props = dev.getProperties();
+        fprintf(stdout, "[GPU] candidate: %s (score %d)\n", props.deviceName.data(), score);
 
-        candidates.insert(std::make_pair(score, device));
+        candidates.insert(std::make_pair(score, i));
     }
 
     if (candidates.empty() || candidates.rbegin()->first <= 0)
@@ -206,17 +173,17 @@ void VulkanContext::pickPhysicalDevice()
         abort();
     }
 
-    m_physicalDevice = candidates.rbegin()->second;
+    uint32_t bestIdx = candidates.rbegin()->second;
+    m_physicalDevice = std::move(devices[bestIdx]);
 
-    VkPhysicalDeviceProperties props;
-    vkGetPhysicalDeviceProperties(m_physicalDevice, &props);
-    fprintf(stdout, "[GPU] selected: %s\n", props.deviceName);
+    vk::PhysicalDeviceProperties props = m_physicalDevice.getProperties();
+    fprintf(stdout, "[GPU] selected: %s\n", props.deviceName.data());
 }
 
 // logical device + queue handles
 void VulkanContext::createLogicalDevice()
 {
-    m_queueFamilyIndices = findQueueFamilies(m_physicalDevice);
+    m_queueFamilyIndices = findQueueFamilies(*m_physicalDevice);
 
     std::set<uint32_t> uniqueQueueFamilies = {
         m_queueFamilyIndices.graphicsFamily.value(),
@@ -224,22 +191,20 @@ void VulkanContext::createLogicalDevice()
     };
 
     float queuePriority = 1.0f;
-    std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+    std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
 
     for (uint32_t queueFamily : uniqueQueueFamilies)
     {
-        VkDeviceQueueCreateInfo queueCreateInfo{};
-        queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+        vk::DeviceQueueCreateInfo queueCreateInfo{};
         queueCreateInfo.queueFamilyIndex = queueFamily;
         queueCreateInfo.queueCount = 1;
         queueCreateInfo.pQueuePriorities = &queuePriority;
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    VkPhysicalDeviceFeatures deviceFeatures{};
+    vk::PhysicalDeviceFeatures deviceFeatures{};
 
-    VkDeviceCreateInfo createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+    vk::DeviceCreateInfo createInfo{};
     createInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
     createInfo.pEnabledFeatures = &deviceFeatures;
@@ -256,14 +221,13 @@ void VulkanContext::createLogicalDevice()
         createInfo.enabledLayerCount = 0;
     }
 
-    VK_CHECK(vkCreateDevice(m_physicalDevice, &createInfo, nullptr, &m_device));
-
-    vkGetDeviceQueue(m_device, m_queueFamilyIndices.graphicsFamily.value(), 0, &m_graphicsQueue);
-    vkGetDeviceQueue(m_device, m_queueFamilyIndices.presentFamily.value(), 0, &m_presentQueue);
+    m_device = m_physicalDevice.createDevice(createInfo);
+    m_graphicsQueue = m_device.getQueue(m_queueFamilyIndices.graphicsFamily.value(), 0);
+    m_presentQueue = m_device.getQueue(m_queueFamilyIndices.presentFamily.value(), 0);
 }
 
 // check queue families, extensions, swapchain support
-bool VulkanContext::isDeviceSuitable(VkPhysicalDevice device) const
+bool VulkanContext::isDeviceSuitable(vk::PhysicalDevice device) const
 {
     QueueFamilyIndices indices = findQueueFamilies(device);
     bool extensionsSupported = checkDeviceExtensionSupport(device);
@@ -279,45 +243,37 @@ bool VulkanContext::isDeviceSuitable(VkPhysicalDevice device) const
 }
 
 // check VK_KHR_swapchain support
-bool VulkanContext::checkDeviceExtensionSupport(VkPhysicalDevice device) const
+bool VulkanContext::checkDeviceExtensionSupport(vk::PhysicalDevice device) const
 {
-    uint32_t extensionCount;
-    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-
-    std::vector<VkExtensionProperties> available(extensionCount);
-    vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, available.data());
+    auto available = device.enumerateDeviceExtensionProperties();
 
     std::set<std::string> required(m_deviceExtensions.begin(), m_deviceExtensions.end());
     for (const auto &ext : available)
     {
-        required.erase(ext.extensionName);
+        required.erase(ext.extensionName.data());
     }
     return required.empty();
 }
 
 // find graphics + present queue family indices
-QueueFamilyIndices VulkanContext::findQueueFamilies(VkPhysicalDevice device) const
+QueueFamilyIndices VulkanContext::findQueueFamilies(vk::PhysicalDevice device) const
 {
     QueueFamilyIndices indices;
 
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
-    std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-    vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+    auto queueFamilies = device.getQueueFamilyProperties();
 
     for (uint32_t i = 0; i < (uint32_t)queueFamilies.size(); i++)
     {
-        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+        if (queueFamilies[i].queueFlags & vk::QueueFlagBits::eGraphics)
         {
             indices.graphicsFamily = i;
         }
-        VkBool32 presentSupport = false;
-        vkGetPhysicalDeviceSurfaceSupportKHR(device, i, m_surface, &presentSupport);
-        if (presentSupport)
+
+        if (device.getSurfaceSupportKHR(i, *m_surface))
         {
             indices.presentFamily = i;
         }
+
         if (indices.isComplete())
         {
             break;
@@ -330,18 +286,14 @@ QueueFamilyIndices VulkanContext::findQueueFamilies(VkPhysicalDevice device) con
 // check requested validation layers are available
 bool VulkanContext::checkValidationLayerSupport() const
 {
-    uint32_t layerCount;
-    vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
-
-    std::vector<VkLayerProperties> availableLayers(layerCount);
-    vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
+    auto availableLayers = m_raiiContext.enumerateInstanceLayerProperties();
 
     for (const char *layerName : m_validationLayers)
     {
         bool found = false;
         for (const auto &layerProps : availableLayers)
         {
-            if (strcmp(layerName, layerProps.layerName) == 0)
+            if (strcmp(layerName, layerProps.layerName.data()) == 0)
             {
                 found = true;
                 break;
@@ -372,46 +324,22 @@ std::vector<const char *> VulkanContext::getRequiredExtensions() const
 }
 
 // query surface formats + present modes
-SwapchainSupportDetails VulkanContext::querySwapchainSupport(VkPhysicalDevice device) const
+SwapchainSupportDetails VulkanContext::querySwapchainSupport(vk::PhysicalDevice device) const
 {
     SwapchainSupportDetails details;
 
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, m_surface, &details.capabilities);
-
-    uint32_t formatCount;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(device, m_surface, &formatCount, nullptr);
-    if (formatCount != 0)
-    {
-        details.formats.resize(formatCount);
-        vkGetPhysicalDeviceSurfaceFormatsKHR(
-            device,
-            m_surface,
-            &formatCount,
-            details.formats.data()
-        );
-    }
-
-    uint32_t presentModeCount;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, nullptr);
-    if (presentModeCount != 0)
-    {
-        details.presentModes.resize(presentModeCount);
-        vkGetPhysicalDeviceSurfacePresentModesKHR(
-            device,
-            m_surface,
-            &presentModeCount,
-            details.presentModes.data()
-        );
-    }
+    details.capabilities = device.getSurfaceCapabilitiesKHR(*m_surface);
+    details.formats = device.getSurfaceFormatsKHR(*m_surface);
+    details.presentModes = device.getSurfacePresentModesKHR(*m_surface);
 
     return details;
 }
 
-// print validation msg to stderr; VK_FALSE = dont abort
-VKAPI_ATTR VkBool32 VKAPI_CALL VulkanContext::debugCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageType,
-    const VkDebugUtilsMessengerCallbackDataEXT *pCallbackData,
+// print validation msg to stderr; vk::False = dont abort
+VKAPI_ATTR vk::Bool32 VKAPI_CALL VulkanContext::debugCallback(
+    vk::DebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+    vk::DebugUtilsMessageTypeFlagsEXT messageType,
+    const vk::DebugUtilsMessengerCallbackDataEXT *pCallbackData,
     void *pUserData
 )
 {
@@ -420,7 +348,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL VulkanContext::debugCallback(
     (void)pUserData;
 
     fprintf(stderr, "[Validation] %s\n", pCallbackData->pMessage);
-    return VK_FALSE;
+    return vk::False;
 }
 
 } // namespace rhi

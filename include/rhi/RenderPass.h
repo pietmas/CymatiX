@@ -1,6 +1,6 @@
 #pragma once
 
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_raii.hpp>
 
 namespace rhi
 {
@@ -22,13 +22,13 @@ class RenderPass
     void init(const VulkanContext &ctx, const Swapchain &swapchain);
     void destroy(const VulkanContext &ctx);
 
-    VkRenderPass get() const
+    vk::RenderPass get() const
     {
-        return m_renderPass;
+        return *m_renderPass;
     }
 
   private:
-    VkRenderPass m_renderPass = VK_NULL_HANDLE;
+    vk::raii::RenderPass m_renderPass{nullptr};
 };
 
 } // namespace rhi

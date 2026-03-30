@@ -2,7 +2,7 @@
 
 #include <app/Config.h>
 #include <vector>
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_raii.hpp>
 
 namespace rhi
 {
@@ -23,24 +23,21 @@ class CommandPool
     void init(const VulkanContext &ctx);
     void destroy(const VulkanContext &ctx);
 
-    VkCommandPool getPool() const
+    vk::CommandPool getPool() const
     {
-        return m_commandPool;
+        return *m_commandPool;
     }
-    const std::vector<VkCommandBuffer> &getBuffers() const
+    // raw handle for recording -- ownership stays in the raii vector
+    vk::CommandBuffer getBuffer(int frameIndex) const
     {
-        return m_commandBuffers;
-    }
-    VkCommandBuffer getBuffer(int frameIndex) const
-    {
-        return m_commandBuffers[frameIndex];
+        return *m_commandBuffers[frameIndex];
     }
 
   private:
     void allocateCommandBuffers(const VulkanContext &ctx);
 
-    VkCommandPool m_commandPool = VK_NULL_HANDLE;
-    std::vector<VkCommandBuffer> m_commandBuffers; // one per frame in flight, not owned
+    vk::raii::CommandPool m_commandPool{nullptr};
+    std::vector<vk::raii::CommandBuffer> m_commandBuffers; // one per frame in flight
 };
 
 } // namespace rhi

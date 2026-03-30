@@ -2,7 +2,7 @@
 
 #include <string>
 #include <vector>
-#include <vulkan/vulkan.h>
+#include <vulkan/vulkan_raii.hpp>
 
 namespace rhi
 {
@@ -25,22 +25,25 @@ class Pipeline
     void init(const VulkanContext &ctx, const Swapchain &swapchain, const RenderPass &renderPass);
     void destroy(const VulkanContext &ctx);
 
-    VkPipeline get() const
+    vk::Pipeline get() const
     {
-        return m_pipeline;
+        return *m_pipeline;
     }
-    VkPipelineLayout getLayout() const
+    vk::PipelineLayout getLayout() const
     {
-        return m_pipelineLayout;
+        return *m_pipelineLayout;
     }
 
   private:
-    VkShaderModule createShaderModule(VkDevice device, const std::vector<char> &code) const;
+    vk::raii::ShaderModule createShaderModule(
+        const vk::raii::Device &device,
+        const std::vector<char> &code
+    ) const;
 
     static std::vector<char> readFile(const std::string &path);
 
-    VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
-    VkPipeline m_pipeline = VK_NULL_HANDLE;
+    vk::raii::PipelineLayout m_pipelineLayout{nullptr};
+    vk::raii::Pipeline m_pipeline{nullptr};
 };
 
 } // namespace rhi

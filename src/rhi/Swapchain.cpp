@@ -16,10 +16,11 @@ void Swapchain::init(const VulkanContext &ctx, GLFWwindow *window)
     createImageViews(ctx);
 }
 
-// destroy framebuffers, image views, swapchain
+// destroy raii objects
 void Swapchain::destroy(const VulkanContext &ctx)
 {
-    cleanupSwapchain(ctx);
+    (void)ctx;
+    cleanupSwapchain();
 }
 
 // tear down + rebuild swapchain (on resize)
@@ -34,13 +35,13 @@ void Swapchain::recreate(const VulkanContext &ctx)
         glfwWaitEvents();
     }
 
-    vkDeviceWaitIdle(ctx.getDevice());
+    ctx.getDevice().waitIdle();
 
-    cleanupSwapchain(ctx);
+    cleanupSwapchain();
     createSwapchain(ctx);
     createImageViews(ctx);
 
-    if (m_renderPass != VK_NULL_HANDLE)
+    if (m_renderPass)
     {
         createFramebuffers(ctx, m_renderPass);
     }
@@ -51,9 +52,9 @@ void Swapchain::createSwapchain(const VulkanContext &ctx)
 {
     SwapchainSupportDetails support = ctx.querySwapchainSupport(ctx.getPhysicalDevice());
 
-    VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(support.formats);
-    VkPresentModeKHR presentMode = chooseSwapPresentMode(support.presentModes);
-    VkExtent2D extent = chooseSwapExtent(support.capabilities);
+    vk::SurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(support.formats);
+    vk::PresentModeKHR presentMode = chooseSwapPresentMode(support.presentModes);
+    vk::Extent2D extent = chooseSwapExtent(support.capabilities);
 
     // one extra image so driver doesnt block us
     uint32_t imageCount = support.capabilities.minImageCount + 1;
@@ -62,45 +63,39 @@ void Swapchain::createSwapchain(const VulkanContext &ctx)
         imageCount = support.capabilities.maxImageCount;
     }
 
-    VkSwapchainCreateInfoKHR createInfo{};
-    createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+    vk::SwapchainCreateInfoKHR createInfo{};
     createInfo.surface = ctx.getSurface();
     createInfo.minImageCount = imageCount;
     createInfo.imageFormat = surfaceFormat.format;
     createInfo.imageColorSpace = surfaceFormat.colorSpace;
     createInfo.imageExtent = extent;
     createInfo.imageArrayLayers = 1;
-    createInfo.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    createInfo.imageUsage = vk::ImageUsageFlagBits::eColorAttachment;
 
     const QueueFamilyIndices &indices = ctx.getQueueFamilyIndices();
     uint32_t queueFamilyIndices[] = {indices.graphicsFamily.value(), indices.presentFamily.value()};
 
     if (indices.graphicsFamily != indices.presentFamily)
     {
-        createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        createInfo.imageSharingMode = vk::SharingMode::eConcurrent;
         createInfo.queueFamilyIndexCount = 2;
         createInfo.pQueueFamilyIndices = queueFamilyIndices;
     }
     else
     {
-        createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        createInfo.imageSharingMode = vk::SharingMode::eExclusive;
         createInfo.queueFamilyIndexCount = 0;
         createInfo.pQueueFamilyIndices = nullptr;
     }
 
     createInfo.preTransform = support.capabilities.currentTransform;
-    createInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+    createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
     createInfo.presentMode = presentMode;
-    createInfo.clipped = VK_TRUE;
-    createInfo.oldSwapchain = VK_NULL_HANDLE;
+    createInfo.clipped = vk::True;
+    createInfo.oldSwapchain = nullptr;
 
-    VK_CHECK(vkCreateSwapchainKHR(ctx.getDevice(), &createInfo, nullptr, &m_swapchain));
-
-    uint32_t count;
-    vkGetSwapchainImagesKHR(ctx.getDevice(), m_swapchain, &count, nullptr);
-    m_images.resize(count);
-    vkGetSwapchainImagesKHR(ctx.getDevice(), m_swapchain, &count, m_images.data());
-
+    m_swapchain = ctx.getDevice().createSwapchainKHR(createInfo);
+    m_images = m_swapchain.getImages();
     m_imageFormat = surfaceFormat.format;
     m_extent = extent;
 }
@@ -108,41 +103,43 @@ void Swapchain::createSwapchain(const VulkanContext &ctx)
 // VkImageView per swapchain image
 void Swapchain::createImageViews(const VulkanContext &ctx)
 {
-    m_imageViews.resize(m_images.size());
+    m_imageViews.clear();
+    m_imageViews.reserve(m_images.size());
 
     for (size_t i = 0; i < m_images.size(); i++)
     {
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        vk::ImageViewCreateInfo viewInfo{};
         viewInfo.image = m_images[i];
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.viewType = vk::ImageViewType::e2D;
         viewInfo.format = m_imageFormat;
-        viewInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
-        viewInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
-        viewInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
-        viewInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.components.r = vk::ComponentSwizzle::eIdentity;
+        viewInfo.components.g = vk::ComponentSwizzle::eIdentity;
+        viewInfo.components.b = vk::ComponentSwizzle::eIdentity;
+        viewInfo.components.a = vk::ComponentSwizzle::eIdentity;
+        viewInfo.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
         viewInfo.subresourceRange.baseMipLevel = 0;
         viewInfo.subresourceRange.levelCount = 1;
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
 
-        VK_CHECK(vkCreateImageView(ctx.getDevice(), &viewInfo, nullptr, &m_imageViews[i]));
+        m_imageViews.push_back(ctx.getDevice().createImageView(viewInfo));
     }
 }
 
 // one framebuffer per image view
-void Swapchain::createFramebuffers(const VulkanContext &ctx, VkRenderPass renderPass)
+void Swapchain::createFramebuffers(const VulkanContext &ctx, vk::RenderPass renderPass)
 {
     m_renderPass = renderPass;
-    m_framebuffers.resize(m_imageViews.size());
+    m_framebuffers.clear();
+    m_framebufferHandles.clear();
+    m_framebuffers.reserve(m_imageViews.size());
+    m_framebufferHandles.reserve(m_imageViews.size());
 
     for (size_t i = 0; i < m_imageViews.size(); i++)
     {
-        VkImageView attachments[] = {m_imageViews[i]};
+        vk::ImageView attachments[] = {*m_imageViews[i]};
 
-        VkFramebufferCreateInfo fbInfo{};
-        fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        vk::FramebufferCreateInfo fbInfo{};
         fbInfo.renderPass = renderPass;
         fbInfo.attachmentCount = 1;
         fbInfo.pAttachments = attachments;
@@ -150,37 +147,28 @@ void Swapchain::createFramebuffers(const VulkanContext &ctx, VkRenderPass render
         fbInfo.height = m_extent.height;
         fbInfo.layers = 1;
 
-        VK_CHECK(vkCreateFramebuffer(ctx.getDevice(), &fbInfo, nullptr, &m_framebuffers[i]));
+        m_framebuffers.push_back(ctx.getDevice().createFramebuffer(fbInfo));
+        m_framebufferHandles.push_back(*m_framebuffers.back());
     }
 }
 
-// destroy framebuffers, image views, then swapchain
-void Swapchain::cleanupSwapchain(const VulkanContext &ctx)
+// clear raii objects -- their destructors call the Vulkan destroy funcs
+void Swapchain::cleanupSwapchain()
 {
-    for (auto fb : m_framebuffers)
-    {
-        vkDestroyFramebuffer(ctx.getDevice(), fb, nullptr);
-    }
     m_framebuffers.clear();
-
-    for (auto iv : m_imageViews)
-    {
-        vkDestroyImageView(ctx.getDevice(), iv, nullptr);
-    }
+    m_framebufferHandles.clear();
     m_imageViews.clear();
-
-    vkDestroySwapchainKHR(ctx.getDevice(), m_swapchain, nullptr);
-    m_swapchain = VK_NULL_HANDLE;
+    m_swapchain = nullptr;
 }
 
 // prefer SRGB+nonlinear, fallback to first
-VkSurfaceFormatKHR
-Swapchain::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &available) const
+vk::SurfaceFormatKHR
+Swapchain::chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR> &available) const
 {
     for (const auto &fmt : available)
     {
-        if (fmt.format == VK_FORMAT_B8G8R8A8_SRGB &&
-            fmt.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+        if (fmt.format == vk::Format::eB8G8R8A8Srgb &&
+            fmt.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
         {
             return fmt;
         }
@@ -189,23 +177,23 @@ Swapchain::chooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR> &availa
 }
 
 // prefer MAILBOX, fallback to FIFO
-VkPresentModeKHR Swapchain::chooseSwapPresentMode(const std::vector<VkPresentModeKHR> &available
+vk::PresentModeKHR Swapchain::chooseSwapPresentMode(const std::vector<vk::PresentModeKHR> &available
 ) const
 {
     for (const auto &mode : available)
     {
-        if (mode == VK_PRESENT_MODE_MAILBOX_KHR)
+        if (mode == vk::PresentModeKHR::eMailbox)
         {
             printf("[Swapchain] present mode: MAILBOX (uncapped, no tearing)\n");
             return mode;
         }
     }
     printf("[Swapchain] present mode: FIFO (vsync, capped to monitor refresh)\n");
-    return VK_PRESENT_MODE_FIFO_KHR;
+    return vk::PresentModeKHR::eFifo;
 }
 
 // use driver extent if available, else clamp to window size
-VkExtent2D Swapchain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilities) const
+vk::Extent2D Swapchain::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR &capabilities) const
 {
     if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
         return capabilities.currentExtent;
@@ -213,7 +201,7 @@ VkExtent2D Swapchain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR &capabilit
     int width, height;
     glfwGetFramebufferSize(m_window, &width, &height);
 
-    VkExtent2D actual = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
+    vk::Extent2D actual = {static_cast<uint32_t>(width), static_cast<uint32_t>(height)};
 
     actual.width = std::clamp(
         actual.width,
