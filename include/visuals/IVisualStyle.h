@@ -19,6 +19,9 @@ class IVisualStyle
 
     // called after swapchain recreation
     virtual void onResize(vk::Extent2D newExtent) = 0;
+
+    // no-op for raster style
+    virtual void computeDispatch(vk::CommandBuffer cmd, uint32_t frameIndex) {}
 };
 
 } // namespace visuals

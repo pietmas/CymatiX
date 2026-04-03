@@ -1,4 +1,3 @@
-#include <rhi/VulkanContext.h>
 #include <visuals/LissajousStyle.h>
 
 #include <cmath>
@@ -94,17 +93,12 @@ static void createMappedBuffer(
 
 // LissajousStyle
 
-LissajousStyle::LissajousStyle(
-    const rhi::VulkanContext &ctx,
-    vk::RenderPass renderPass,
-    vk::Extent2D extent,
-    const palette::IPalette &palette
-)
-    : m_ctx(ctx), m_extent(extent)
+LissajousStyle::LissajousStyle(const rhi::VulkanDeps &deps, const palette::IPalette &palette)
+    : m_deps(deps), m_extent(deps.extent)
 {
     createDescriptorSetLayout();
     createDescriptorPool();
-    createPipeline(renderPass);
+    createPipeline(m_deps.renderPass);
     createUBOBuffers();
     createVertexBuffer();
     createDescriptorSets(palette);
@@ -144,7 +138,7 @@ void LissajousStyle::createDescriptorSetLayout()
     layoutInfo.bindingCount = 2;
     layoutInfo.pBindings = bindings;
 
-    m_descriptorSetLayout = m_ctx.getDevice().createDescriptorSetLayout(layoutInfo);
+    m_descriptorSetLayout = (*m_deps.device).createDescriptorSetLayout(layoutInfo);
 }
 
 // pool holds MAX_FRAMES_IN_FLIGHT sets, each with 2 UBO descriptors
@@ -160,13 +154,13 @@ void LissajousStyle::createDescriptorPool()
     poolInfo.pPoolSizes = &poolSize;
     poolInfo.maxSets = Config::MAX_FRAMES_IN_FLIGHT;
 
-    m_descriptorPool = m_ctx.getDevice().createDescriptorPool(poolInfo);
+    m_descriptorPool = (*m_deps.device).createDescriptorPool(poolInfo);
 }
 
 // Lissajous graphics pipeline
 void LissajousStyle::createPipeline(vk::RenderPass renderPass)
 {
-    const vk::raii::Device &device = m_ctx.getDevice();
+    const vk::raii::Device &device = (*m_deps.device);
 
     auto vertCode = readFile(SHADER_DIR "/lissajous.vert.spv");
     auto fragCode = readFile(SHADER_DIR "/lissajous.frag.spv");
@@ -279,8 +273,8 @@ void LissajousStyle::createPipeline(vk::RenderPass renderPass)
 // spectrum UBO + palette UBO per frame-in-flight
 void LissajousStyle::createUBOBuffers()
 {
-    const vk::raii::Device &device = m_ctx.getDevice();
-    vk::PhysicalDevice physDev = m_ctx.getPhysicalDevice();
+    const vk::raii::Device &device = (*m_deps.device);
+    vk::PhysicalDevice physDev = m_deps.physicalDevice;
 
     m_spectrumUBOBuffers.reserve(Config::MAX_FRAMES_IN_FLIGHT);
     m_spectrumUBOMemory.reserve(Config::MAX_FRAMES_IN_FLIGHT);
@@ -319,8 +313,8 @@ void LissajousStyle::createUBOBuffers()
 void LissajousStyle::createVertexBuffer()
 {
     createMappedBuffer(
-        m_ctx.getDevice(),
-        m_ctx.getPhysicalDevice(),
+        (*m_deps.device),
+        m_deps.physicalDevice,
         N_POINTS * sizeof(float) * 2,
         vk::BufferUsageFlagBits::eVertexBuffer,
         m_vertexBuffer,
@@ -332,9 +326,12 @@ void LissajousStyle::createVertexBuffer()
 // alloc descriptor sets, wire to UBO buffers
 void LissajousStyle::createDescriptorSets(const palette::IPalette &palette)
 {
-    const vk::raii::Device &device = m_ctx.getDevice();
+    const vk::raii::Device &device = (*m_deps.device);
 
-    std::vector<vk::DescriptorSetLayout> layouts(Config::MAX_FRAMES_IN_FLIGHT, *m_descriptorSetLayout);
+    std::vector<vk::DescriptorSetLayout> layouts(
+        Config::MAX_FRAMES_IN_FLIGHT,
+        *m_descriptorSetLayout
+    );
 
     vk::DescriptorSetAllocateInfo allocInfo{};
     allocInfo.descriptorPool = *m_descriptorPool;

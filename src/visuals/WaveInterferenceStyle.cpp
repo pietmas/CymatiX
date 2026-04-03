@@ -1,4 +1,3 @@
-#include <rhi/VulkanContext.h>
 #include <visuals/WaveInterferenceStyle.h>
 
 #include <cstdio>
@@ -59,7 +58,7 @@ findMemoryType(vk::PhysicalDevice physDev, uint32_t typeFilter, vk::MemoryProper
     abort();
 }
 
-// create host-visible buffer, bind memory, map it -- caller stores the mapped ptr
+// create host-visible buffer, bind memory, map it, caller stores the mapped ptr
 static void createMappedBuffer(
     const vk::raii::Device &device,
     vk::PhysicalDevice physDev,
@@ -95,16 +94,14 @@ static void createMappedBuffer(
 // constructor
 
 WaveInterferenceStyle::WaveInterferenceStyle(
-    const rhi::VulkanContext &ctx,
-    vk::RenderPass renderPass,
-    vk::Extent2D extent,
+    const rhi::VulkanDeps &deps,
     const palette::IPalette &palette
 )
-    : m_ctx(ctx), m_extent(extent)
+    : m_deps(deps), m_extent(deps.extent)
 {
     createDescriptorSetLayout();
     createDescriptorPool();
-    createPipeline(renderPass);
+    createPipeline(m_deps.renderPass);
     createUBOBuffers();
     createDescriptorSets(palette);
 }
@@ -139,7 +136,7 @@ void WaveInterferenceStyle::createDescriptorSetLayout()
     layoutInfo.bindingCount = 2;
     layoutInfo.pBindings = bindings;
 
-    m_descriptorSetLayout = m_ctx.getDevice().createDescriptorSetLayout(layoutInfo);
+    m_descriptorSetLayout = (*m_deps.device).createDescriptorSetLayout(layoutInfo);
 }
 
 void WaveInterferenceStyle::createDescriptorPool()
@@ -154,18 +151,18 @@ void WaveInterferenceStyle::createDescriptorPool()
     poolInfo.pPoolSizes = &poolSize;
     poolInfo.maxSets = Config::MAX_FRAMES_IN_FLIGHT;
 
-    m_descriptorPool = m_ctx.getDevice().createDescriptorPool(poolInfo);
+    m_descriptorPool = (*m_deps.device).createDescriptorPool(poolInfo);
 }
 
 // full-screen procedural pipeline
 void WaveInterferenceStyle::createPipeline(vk::RenderPass renderPass)
 {
-    const vk::raii::Device &device = m_ctx.getDevice();
+    const vk::raii::Device &device = (*m_deps.device);
 
     auto vertCode = readFile(SHADER_DIR "/wave_interference.vert.spv");
     auto fragCode = readFile(SHADER_DIR "/wave_interference.frag.spv");
 
-    // raii shader modules -- destroyed at end of this function
+    // raii shader modules, destroyed at end of this function
     vk::raii::ShaderModule vertModule = createShaderModule(device, vertCode);
     vk::raii::ShaderModule fragModule = createShaderModule(device, fragCode);
 
@@ -259,8 +256,8 @@ void WaveInterferenceStyle::createPipeline(vk::RenderPass renderPass)
 
 void WaveInterferenceStyle::createUBOBuffers()
 {
-    const vk::raii::Device &device = m_ctx.getDevice();
-    vk::PhysicalDevice physDev = m_ctx.getPhysicalDevice();
+    const vk::raii::Device &device = (*m_deps.device);
+    vk::PhysicalDevice physDev = m_deps.physicalDevice;
 
     m_spectrumUBOBuffers.reserve(Config::MAX_FRAMES_IN_FLIGHT);
     m_spectrumUBOMemory.reserve(Config::MAX_FRAMES_IN_FLIGHT);
@@ -297,9 +294,12 @@ void WaveInterferenceStyle::createUBOBuffers()
 
 void WaveInterferenceStyle::createDescriptorSets(const palette::IPalette &palette)
 {
-    const vk::raii::Device &device = m_ctx.getDevice();
+    const vk::raii::Device &device = (*m_deps.device);
 
-    std::vector<vk::DescriptorSetLayout> layouts(Config::MAX_FRAMES_IN_FLIGHT, *m_descriptorSetLayout);
+    std::vector<vk::DescriptorSetLayout> layouts(
+        Config::MAX_FRAMES_IN_FLIGHT,
+        *m_descriptorSetLayout
+    );
 
     vk::DescriptorSetAllocateInfo allocInfo{};
     allocInfo.descriptorPool = *m_descriptorPool;

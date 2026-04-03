@@ -46,13 +46,19 @@ void App::initVulkan()
     m_sync = std::make_unique<rhi::Sync>();
     m_sync->init(*m_context, m_swapchain->getImageCount());
 
-    // active visual style -- same interface for all styles, easy swap
-    m_activeStyle = std::make_unique<visuals::LissajousStyle>(
-        *m_context,
-        m_renderPass->get(),
-        m_swapchain->getExtent(),
-        m_palette
+    // register all styles with factory lambdas that capture deps by value
+    m_styleRegistry.registerStyle(
+        "lissajous",
+        [deps = makeDeps()](const palette::IPalette &p)
+        { return std::make_unique<visuals::LissajousStyle>(deps, p); }
     );
+    m_styleRegistry.registerStyle(
+        "wave_interference",
+        [deps = makeDeps()](const palette::IPalette &p)
+        { return std::make_unique<visuals::WaveInterferenceStyle>(deps, p); }
+    );
+
+    m_activeStyle = m_styleRegistry.create("lissajous", m_palette);
 }
 
 // poll events, draw until window closes
@@ -184,10 +190,10 @@ void App::drawFrame()
     const vk::raii::Device &device = m_context->getDevice();
     vk::Fence fence = m_sync->getInFlightFence(m_currentFrame);
 
-    // wait for this frame's fence -- returns vk::Result (eSuccess or eTimeout)
+    // wait for this frame's fence returns vk::Result (eSuccess or eTimeout)
     (void)device.waitForFences({fence}, vk::True, UINT64_MAX);
 
-    // acquire next image -- eErrorOutOfDateKHR throws, eSuboptimalKHR is in .first
+    // acquire next image, eErrorOutOfDateKHR throws, eSuboptimalKHR is in .first
     uint32_t imageIndex;
     try
     {
@@ -266,7 +272,7 @@ void App::drawFrame()
 
     m_context->getGraphicsQueue().submit({submitInfo}, fence);
 
-    // present image -- eErrorOutOfDateKHR throws, eSuboptimalKHR is in result
+    // present image, eErrorOutOfDateKHR throws, eSuboptimalKHR is in result
     vk::SwapchainKHR swapchains[] = {m_swapchain->getSwapchain()};
 
     vk::PresentInfoKHR presentInfo{};
@@ -292,6 +298,17 @@ void App::drawFrame()
     }
 
     m_currentFrame = (m_currentFrame + 1) % Config::MAX_FRAMES_IN_FLIGHT;
+}
+
+// bundle up vulkan handles for passing to style factories
+rhi::VulkanDeps App::makeDeps() const
+{
+    rhi::VulkanDeps deps{};
+    deps.device = &m_context->getDevice();
+    deps.physicalDevice = m_context->getPhysicalDevice();
+    deps.renderPass = m_renderPass->get();
+    deps.extent = m_swapchain->getExtent();
+    return deps;
 }
 
 // entry point

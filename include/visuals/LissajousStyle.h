@@ -3,15 +3,11 @@
 #include <app/Config.h>
 #include <app/SharedTypes.h>
 #include <palette/IPalette.h>
+#include <rhi/VulkanDeps.h>
 #include <visuals/IVisualStyle.h>
 
 #include <vector>
 #include <vulkan/vulkan_raii.hpp>
-
-namespace rhi
-{
-class VulkanContext;
-}
 
 namespace visuals
 {
@@ -21,12 +17,7 @@ class LissajousStyle : public IVisualStyle
   public:
     static constexpr uint32_t N_POINTS = 4096;
 
-    LissajousStyle(
-        const rhi::VulkanContext &ctx,
-        vk::RenderPass renderPass,
-        vk::Extent2D extent,
-        const palette::IPalette &palette
-    );
+    LissajousStyle(const rhi::VulkanDeps &deps, const palette::IPalette &palette);
     ~LissajousStyle() override;
 
     LissajousStyle(const LissajousStyle &) = delete;
@@ -46,7 +37,7 @@ class LissajousStyle : public IVisualStyle
     void createVertexBuffer();
     void createDescriptorSets(const palette::IPalette &palette);
 
-    const rhi::VulkanContext &m_ctx;
+    rhi::VulkanDeps m_deps;
     vk::Extent2D m_extent;
 
     vk::raii::DescriptorSetLayout m_descriptorSetLayout{nullptr};
@@ -64,7 +55,7 @@ class LissajousStyle : public IVisualStyle
     std::vector<vk::raii::DeviceMemory> m_paletteUBOMemory;
     void *m_paletteMapped[Config::MAX_FRAMES_IN_FLIGHT]{};
 
-    // single host-visible vertex buffer -- shared across frames (fence ensures safety)
+    // single host-visible vertex buffer, shared across frames (fence ensures safety)
     vk::raii::Buffer m_vertexBuffer{nullptr};
     vk::raii::DeviceMemory m_vertexBufferMemory{nullptr};
     void *m_vertexMapped = nullptr;

@@ -3,15 +3,11 @@
 #include <app/Config.h>
 #include <app/SharedTypes.h>
 #include <palette/IPalette.h>
+#include <rhi/VulkanDeps.h>
 #include <visuals/IVisualStyle.h>
 
 #include <vector>
 #include <vulkan/vulkan_raii.hpp>
-
-namespace rhi
-{
-class VulkanContext;
-}
 
 namespace visuals
 {
@@ -19,12 +15,7 @@ namespace visuals
 class WaveInterferenceStyle : public IVisualStyle
 {
   public:
-    WaveInterferenceStyle(
-        const rhi::VulkanContext &ctx,
-        vk::RenderPass renderPass,
-        vk::Extent2D extent,
-        const palette::IPalette &palette
-    );
+    WaveInterferenceStyle(const rhi::VulkanDeps &deps, const palette::IPalette &palette);
     ~WaveInterferenceStyle() override;
 
     WaveInterferenceStyle(const WaveInterferenceStyle &) = delete;
@@ -43,7 +34,7 @@ class WaveInterferenceStyle : public IVisualStyle
     void createUBOBuffers();
     void createDescriptorSets(const palette::IPalette &palette);
 
-    const rhi::VulkanContext &m_ctx;
+    rhi::VulkanDeps m_deps;
     vk::Extent2D m_extent;
 
     vk::raii::DescriptorSetLayout m_descriptorSetLayout{nullptr};

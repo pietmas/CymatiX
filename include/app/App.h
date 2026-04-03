@@ -8,7 +8,9 @@
 #include <rhi/Swapchain.h>
 #include <rhi/Sync.h>
 #include <rhi/VulkanContext.h>
+#include <rhi/VulkanDeps.h>
 #include <visuals/IVisualStyle.h>
+#include <visuals/VisualStyleRegistry.h>
 
 #include <deque>
 #include <memory>
@@ -39,6 +41,7 @@ class App
     void drawFrame();
     void update();
     void recreateSwapchain();
+    rhi::VulkanDeps makeDeps() const;
 
     static void framebufferResizeCallback(GLFWwindow *window, int width, int height);
 
@@ -52,6 +55,7 @@ class App
 
     // visual style and palette
     palette::BioluminescentPalette m_palette; // value type, no GPU resources
+    visuals::VisualStyleRegistry m_styleRegistry;
     std::unique_ptr<visuals::IVisualStyle> m_activeStyle;
 
     // audio subsystem
