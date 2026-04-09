@@ -30,7 +30,7 @@ class WaveInterferenceStyle : public IVisualStyle
   private:
     void createDescriptorSetLayout();
     void createDescriptorPool();
-    void createPipeline(vk::RenderPass renderPass);
+    void createPipeline(vk::Format colorFormat);
     void createUBOBuffers();
     void createDescriptorSets(const palette::IPalette &palette);
 

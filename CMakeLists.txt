@@ -67,7 +67,6 @@ add_executable(cymatics
     src/app/App.cpp
     src/rhi/VulkanContext.cpp
     src/rhi/Swapchain.cpp
-    src/rhi/RenderPass.cpp
     src/rhi/Pipeline.cpp
     src/rhi/CommandPool.cpp
     src/rhi/Sync.cpp

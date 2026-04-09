@@ -1,5 +1,4 @@
 #include <rhi/Pipeline.h>
-#include <rhi/RenderPass.h>
 #include <rhi/Swapchain.h>
 #include <rhi/VulkanContext.h>
 
@@ -31,10 +30,8 @@ std::vector<char> Pipeline::readFile(const std::string &path)
 }
 
 // wrap SPIR-V in shader module, scoped to pipeline creation
-vk::raii::ShaderModule Pipeline::createShaderModule(
-    const vk::raii::Device &device,
-    const std::vector<char> &code
-) const
+vk::raii::ShaderModule
+Pipeline::createShaderModule(const vk::raii::Device &device, const std::vector<char> &code) const
 {
     vk::ShaderModuleCreateInfo createInfo{};
     createInfo.codeSize = code.size();
@@ -47,7 +44,7 @@ vk::raii::ShaderModule Pipeline::createShaderModule(
 void Pipeline::init(
     const VulkanContext &ctx,
     const Swapchain &swapchain,
-    const RenderPass &renderPass
+    vk::Format colorFormat
 )
 {
     (void)swapchain; // extent no longer needed, viewport/scissor are dynamic
@@ -57,7 +54,7 @@ void Pipeline::init(
     auto vertCode = readFile(SHADER_DIR "/triangle.vert.spv");
     auto fragCode = readFile(SHADER_DIR "/triangle.frag.spv");
 
-    // shader modules only needed during create -- raii handles cleanup at scope end
+    // shader modules only needed during create, raii handles cleanup at scope end
     vk::raii::ShaderModule vertModule = createShaderModule(device, vertCode);
     vk::raii::ShaderModule fragModule = createShaderModule(device, fragCode);
 
@@ -122,7 +119,13 @@ void Pipeline::init(
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo{};
     m_pipelineLayout = device.createPipelineLayout(pipelineLayoutInfo);
 
+    // tell the pipeline what format the color attachment will have at draw time
+    vk::PipelineRenderingCreateInfo renderingInfo{};
+    renderingInfo.colorAttachmentCount    = 1;
+    renderingInfo.pColorAttachmentFormats = &colorFormat;
+
     vk::GraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.pNext = &renderingInfo;
     pipelineInfo.stageCount = 2;
     pipelineInfo.pStages = shaderStages;
     pipelineInfo.pVertexInputState = &vertexInputInfo;
@@ -134,7 +137,7 @@ void Pipeline::init(
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = *m_pipelineLayout;
-    pipelineInfo.renderPass = renderPass.get();
+    pipelineInfo.renderPass = nullptr; // must be null with dynamic rendering
     pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = nullptr;
 
@@ -142,7 +145,7 @@ void Pipeline::init(
     // vertModule + fragModule destroyed here (end of scope)
 }
 
-// reset raii handles -- destructors call vkDestroyPipeline / vkDestroyPipelineLayout
+// reset raii handles, destructors call vkDestroyPipeline / vkDestroyPipelineLayout
 void Pipeline::destroy(const VulkanContext &ctx)
 {
     (void)ctx;

@@ -32,7 +32,7 @@ class LissajousStyle : public IVisualStyle
   private:
     void createDescriptorSetLayout();
     void createDescriptorPool();
-    void createPipeline(vk::RenderPass renderPass);
+    void createPipeline(vk::Format colorFormat);
     void createUBOBuffers();
     void createVertexBuffer();
     void createDescriptorSets(const palette::IPalette &palette);

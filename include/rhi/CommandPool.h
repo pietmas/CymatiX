@@ -27,7 +27,7 @@ class CommandPool
     {
         return *m_commandPool;
     }
-    // raw handle for recording -- ownership stays in the raii vector
+    // raw handle for recording ownership stays in the raii vector
     vk::CommandBuffer getBuffer(int frameIndex) const
     {
         return *m_commandBuffers[frameIndex];

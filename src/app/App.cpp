@@ -35,11 +35,6 @@ void App::initVulkan()
     m_swapchain = std::make_unique<rhi::Swapchain>();
     m_swapchain->init(*m_context, m_window);
 
-    m_renderPass = std::make_unique<rhi::RenderPass>();
-    m_renderPass->init(*m_context, *m_swapchain);
-
-    m_swapchain->createFramebuffers(*m_context, m_renderPass->get());
-
     m_commandPool = std::make_unique<rhi::CommandPool>();
     m_commandPool->init(*m_context);
 
@@ -169,7 +164,6 @@ void App::shutdown()
 
     m_sync->destroy(*m_context);
     m_commandPool->destroy(*m_context);
-    m_renderPass->destroy(*m_context);
     m_swapchain->destroy(*m_context);
     m_context->destroy();
 
@@ -223,17 +217,41 @@ void App::drawFrame()
     vk::CommandBufferBeginInfo beginInfo{};
     cmd.begin(beginInfo);
 
-    vk::ClearValue clearColor{vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}}};
+    // barrier 1: transition image to color attachment layout
+    vk::ImageMemoryBarrier2 toColor{};
+    toColor.srcStageMask     = vk::PipelineStageFlagBits2::eTopOfPipe;
+    toColor.srcAccessMask    = vk::AccessFlagBits2::eNone;
+    toColor.dstStageMask     = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+    toColor.dstAccessMask    = vk::AccessFlagBits2::eColorAttachmentWrite;
+    toColor.oldLayout        = vk::ImageLayout::eUndefined;
+    toColor.newLayout        = vk::ImageLayout::eColorAttachmentOptimal;
+    toColor.image            = m_swapchain->getImages()[imageIndex];
+    toColor.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
 
-    vk::RenderPassBeginInfo renderPassInfo{};
-    renderPassInfo.renderPass = m_renderPass->get();
-    renderPassInfo.framebuffer = m_swapchain->getFramebuffers()[imageIndex];
-    renderPassInfo.renderArea.offset = vk::Offset2D{0, 0};
-    renderPassInfo.renderArea.extent = m_swapchain->getExtent();
-    renderPassInfo.clearValueCount = 1;
-    renderPassInfo.pClearValues = &clearColor;
+    vk::DependencyInfo dep{};
+    dep.imageMemoryBarrierCount = 1;
+    dep.pImageMemoryBarriers    = &toColor;
+    cmd.pipelineBarrier2(dep);
 
-    cmd.beginRenderPass(renderPassInfo, vk::SubpassContents::eInline);
+    // begin dynamic rendering
+    vk::ClearValue clearColor{};
+    clearColor.color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
+
+    vk::RenderingAttachmentInfo colorAttachment{};
+    colorAttachment.imageView   = m_swapchain->getImageViews()[imageIndex];
+    colorAttachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+    colorAttachment.loadOp      = vk::AttachmentLoadOp::eClear;
+    colorAttachment.storeOp     = vk::AttachmentStoreOp::eStore;
+    colorAttachment.clearValue  = clearColor;
+
+    vk::RenderingInfo renderingInfo{};
+    renderingInfo.renderArea.offset        = vk::Offset2D{0, 0};
+    renderingInfo.renderArea.extent        = m_swapchain->getExtent();
+    renderingInfo.layerCount               = 1;
+    renderingInfo.colorAttachmentCount     = 1;
+    renderingInfo.pColorAttachments        = &colorAttachment;
+
+    cmd.beginRendering(renderingInfo);
 
     // viewport + scissor to match swapchain extent
     vk::Viewport viewport{};
@@ -253,7 +271,23 @@ void App::drawFrame()
     // delegate to active style
     m_activeStyle->render(cmd, (uint32_t)m_currentFrame);
 
-    cmd.endRenderPass();
+    cmd.endRendering();
+
+    // barrier 2: transition image back to present layout
+    vk::ImageMemoryBarrier2 toPresent{};
+    toPresent.srcStageMask     = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+    toPresent.srcAccessMask    = vk::AccessFlagBits2::eColorAttachmentWrite;
+    toPresent.dstStageMask     = vk::PipelineStageFlagBits2::eBottomOfPipe;
+    toPresent.dstAccessMask    = vk::AccessFlagBits2::eNone;
+    toPresent.oldLayout        = vk::ImageLayout::eColorAttachmentOptimal;
+    toPresent.newLayout        = vk::ImageLayout::ePresentSrcKHR;
+    toPresent.image            = m_swapchain->getImages()[imageIndex];
+    toPresent.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
+
+    vk::DependencyInfo dep2{};
+    dep2.imageMemoryBarrierCount = 1;
+    dep2.pImageMemoryBarriers    = &toPresent;
+    cmd.pipelineBarrier2(dep2);
     cmd.end();
 
     // submit to graphics queue
@@ -306,7 +340,7 @@ rhi::VulkanDeps App::makeDeps() const
     rhi::VulkanDeps deps{};
     deps.device = &m_context->getDevice();
     deps.physicalDevice = m_context->getPhysicalDevice();
-    deps.renderPass = m_renderPass->get();
+    deps.colorFormat = m_swapchain->getImageFormat();
     deps.extent = m_swapchain->getExtent();
     return deps;
 }

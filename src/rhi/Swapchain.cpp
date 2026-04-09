@@ -40,11 +40,6 @@ void Swapchain::recreate(const VulkanContext &ctx)
     cleanupSwapchain();
     createSwapchain(ctx);
     createImageViews(ctx);
-
-    if (m_renderPass)
-    {
-        createFramebuffers(ctx, m_renderPass);
-    }
 }
 
 // create VkSwapchainKHR
@@ -104,7 +99,9 @@ void Swapchain::createSwapchain(const VulkanContext &ctx)
 void Swapchain::createImageViews(const VulkanContext &ctx)
 {
     m_imageViews.clear();
+    m_imageViewHandles.clear();
     m_imageViews.reserve(m_images.size());
+    m_imageViewHandles.reserve(m_images.size());
 
     for (size_t i = 0; i < m_images.size(); i++)
     {
@@ -123,40 +120,14 @@ void Swapchain::createImageViews(const VulkanContext &ctx)
         viewInfo.subresourceRange.layerCount = 1;
 
         m_imageViews.push_back(ctx.getDevice().createImageView(viewInfo));
+        m_imageViewHandles.push_back(*m_imageViews.back());
     }
 }
 
-// one framebuffer per image view
-void Swapchain::createFramebuffers(const VulkanContext &ctx, vk::RenderPass renderPass)
-{
-    m_renderPass = renderPass;
-    m_framebuffers.clear();
-    m_framebufferHandles.clear();
-    m_framebuffers.reserve(m_imageViews.size());
-    m_framebufferHandles.reserve(m_imageViews.size());
-
-    for (size_t i = 0; i < m_imageViews.size(); i++)
-    {
-        vk::ImageView attachments[] = {*m_imageViews[i]};
-
-        vk::FramebufferCreateInfo fbInfo{};
-        fbInfo.renderPass = renderPass;
-        fbInfo.attachmentCount = 1;
-        fbInfo.pAttachments = attachments;
-        fbInfo.width = m_extent.width;
-        fbInfo.height = m_extent.height;
-        fbInfo.layers = 1;
-
-        m_framebuffers.push_back(ctx.getDevice().createFramebuffer(fbInfo));
-        m_framebufferHandles.push_back(*m_framebuffers.back());
-    }
-}
-
-// clear raii objects -- their destructors call the Vulkan destroy funcs
+// clear raii objects, their destructors call the Vulkan destroy funcs
 void Swapchain::cleanupSwapchain()
 {
-    m_framebuffers.clear();
-    m_framebufferHandles.clear();
+    m_imageViewHandles.clear();
     m_imageViews.clear();
     m_swapchain = nullptr;
 }

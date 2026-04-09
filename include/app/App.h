@@ -4,7 +4,6 @@
 #include <audio/FFTProcessor.h>
 #include <palette/BioluminescentPalette.h>
 #include <rhi/CommandPool.h>
-#include <rhi/RenderPass.h>
 #include <rhi/Swapchain.h>
 #include <rhi/Sync.h>
 #include <rhi/VulkanContext.h>
@@ -49,7 +48,6 @@ class App
 
     std::unique_ptr<rhi::VulkanContext> m_context;
     std::unique_ptr<rhi::Swapchain> m_swapchain;
-    std::unique_ptr<rhi::RenderPass> m_renderPass;
     std::unique_ptr<rhi::CommandPool> m_commandPool;
     std::unique_ptr<rhi::Sync> m_sync;
 

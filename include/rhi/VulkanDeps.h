@@ -10,7 +10,7 @@ struct VulkanDeps
 {
     const vk::raii::Device *device = nullptr; // not owned
     vk::PhysicalDevice physicalDevice;
-    vk::RenderPass renderPass;
+    vk::Format colorFormat = vk::Format::eUndefined;
     vk::Extent2D extent;
 };
 

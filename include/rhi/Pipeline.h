@@ -9,7 +9,6 @@ namespace rhi
 
 class VulkanContext;
 class Swapchain;
-class RenderPass;
 
 class Pipeline
 {
@@ -22,7 +21,7 @@ class Pipeline
     Pipeline(Pipeline &&) = delete;
     Pipeline &operator=(Pipeline &&) = delete;
 
-    void init(const VulkanContext &ctx, const Swapchain &swapchain, const RenderPass &renderPass);
+    void init(const VulkanContext &ctx, const Swapchain &swapchain, vk::Format colorFormat);
     void destroy(const VulkanContext &ctx);
 
     vk::Pipeline get() const

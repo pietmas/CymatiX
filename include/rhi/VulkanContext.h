@@ -6,8 +6,7 @@
 #include <vector>
 #include <vulkan/vulkan_raii.hpp>
 
-// exceptions throw on failure; VK_CHECK just evaluates (kept for callsites that
-// havent been cleaned up yet and for the GLFW surface raw-C check)
+// exceptions throw on failure; VK_CHECK just evaluates
 #define VK_CHECK(call) (void)(call)
 
 struct GLFWwindow;
@@ -47,12 +46,12 @@ class VulkanContext
     void init(GLFWwindow *window);
     void destroy();
 
-    // return const ref to raii device -- callers use it to create raii resources
+    // return const ref to raii device, callers use it to create raii resources
     const vk::raii::Device &getDevice() const
     {
         return m_device;
     }
-    // raw physical device handle -- sufficient for getMemoryProperties etc.
+    // raw physical device handle, sufficient for getMemoryProperties etc.
     vk::PhysicalDevice getPhysicalDevice() const
     {
         return *m_physicalDevice;
@@ -97,7 +96,7 @@ class VulkanContext
     bool checkValidationLayerSupport() const;
     std::vector<const char *> getRequiredExtensions() const;
 
-    // m_raiiContext must be first -- it owns the dynamic loader used by all raii objects
+    // m_raiiContext must be first it owns the dynamic loader used by all raii objects
     vk::raii::Context m_raiiContext;
     vk::raii::Instance m_instance{nullptr};
     vk::raii::DebugUtilsMessengerEXT m_debugMessenger{nullptr};

@@ -101,7 +101,7 @@ WaveInterferenceStyle::WaveInterferenceStyle(
 {
     createDescriptorSetLayout();
     createDescriptorPool();
-    createPipeline(m_deps.renderPass);
+    createPipeline(m_deps.colorFormat);
     createUBOBuffers();
     createDescriptorSets(palette);
 }
@@ -155,7 +155,7 @@ void WaveInterferenceStyle::createDescriptorPool()
 }
 
 // full-screen procedural pipeline
-void WaveInterferenceStyle::createPipeline(vk::RenderPass renderPass)
+void WaveInterferenceStyle::createPipeline(vk::Format colorFormat)
 {
     const vk::raii::Device &device = (*m_deps.device);
 
@@ -234,7 +234,12 @@ void WaveInterferenceStyle::createPipeline(vk::RenderPass renderPass)
 
     m_pipelineLayout = device.createPipelineLayout(layoutInfo);
 
+    vk::PipelineRenderingCreateInfo renderingInfo{};
+    renderingInfo.colorAttachmentCount    = 1;
+    renderingInfo.pColorAttachmentFormats = &colorFormat;
+
     vk::GraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.pNext = &renderingInfo;
     pipelineInfo.stageCount = 2;
     pipelineInfo.pStages = shaderStages;
     pipelineInfo.pVertexInputState = &vertexInputInfo;
@@ -246,7 +251,7 @@ void WaveInterferenceStyle::createPipeline(vk::RenderPass renderPass)
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = *m_pipelineLayout;
-    pipelineInfo.renderPass = renderPass;
+    pipelineInfo.renderPass = nullptr; // must be null with dynamic rendering
     pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = nullptr;
 

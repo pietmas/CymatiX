@@ -43,18 +43,18 @@ class Swapchain
     {
         return m_extent;
     }
-    // raw framebuffer handles -- RAII objects remain owners
-    const std::vector<vk::Framebuffer> &getFramebuffers() const
+    const std::vector<vk::Image> &getImages() const
     {
-        return m_framebufferHandles;
+        return m_images;
+    }
+    const std::vector<vk::ImageView> &getImageViews() const
+    {
+        return m_imageViewHandles;
     }
     uint32_t getImageCount() const
     {
         return (uint32_t)m_images.size();
     }
-
-    // framebuffers created separately, after render pass exists
-    void createFramebuffers(const VulkanContext &ctx, vk::RenderPass renderPass);
 
   private:
     void createSwapchain(const VulkanContext &ctx);
@@ -73,10 +73,8 @@ class Swapchain
 
     std::vector<vk::Image> m_images; // owned by the swapchain, not us
     std::vector<vk::raii::ImageView> m_imageViews;
-    std::vector<vk::raii::Framebuffer> m_framebuffers;
-    std::vector<vk::Framebuffer> m_framebufferHandles; // raw handles mirroring m_framebuffers
+    std::vector<vk::ImageView> m_imageViewHandles; // raw handles mirroring m_imageViews
 
-    vk::RenderPass m_renderPass; // not owned, stored for recreate
     GLFWwindow *m_window = nullptr; // not owned
 };
 

@@ -33,7 +33,7 @@ void VulkanContext::init(GLFWwindow *window)
     createLogicalDevice();
 }
 
-// destroy in reverse order -- raii handles destruction when reset to nullptr
+// destroy in reverse order, raii handles destruction when reset to nullptr
 void VulkanContext::destroy()
 {
     m_presentQueue = nullptr;
@@ -59,7 +59,7 @@ void VulkanContext::createInstance()
     appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.pEngineName = "No Engine";
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion = VK_API_VERSION_1_0;
+    appInfo.apiVersion = VK_API_VERSION_1_3;
 
     auto extensions = getRequiredExtensions();
 
@@ -202,12 +202,19 @@ void VulkanContext::createLogicalDevice()
         queueCreateInfos.push_back(queueCreateInfo);
     }
 
-    vk::PhysicalDeviceFeatures deviceFeatures{};
+    // enable 1.3 core features via pNext chain; pEnabledFeatures must be null when using Features2
+    vk::PhysicalDeviceVulkan13Features vk13Features{};
+    vk13Features.dynamicRendering = vk::True;
+    vk13Features.synchronization2 = vk::True;
+
+    vk::PhysicalDeviceFeatures2 features2{};
+    features2.pNext = &vk13Features;
 
     vk::DeviceCreateInfo createInfo{};
+    createInfo.pNext = &features2;
     createInfo.queueCreateInfoCount = (uint32_t)queueCreateInfos.size();
     createInfo.pQueueCreateInfos = queueCreateInfos.data();
-    createInfo.pEnabledFeatures = &deviceFeatures;
+    createInfo.pEnabledFeatures = nullptr;
     createInfo.enabledExtensionCount = (uint32_t)m_deviceExtensions.size();
     createInfo.ppEnabledExtensionNames = m_deviceExtensions.data();
 

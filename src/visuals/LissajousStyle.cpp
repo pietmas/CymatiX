@@ -98,7 +98,7 @@ LissajousStyle::LissajousStyle(const rhi::VulkanDeps &deps, const palette::IPale
 {
     createDescriptorSetLayout();
     createDescriptorPool();
-    createPipeline(m_deps.renderPass);
+    createPipeline(m_deps.colorFormat);
     createUBOBuffers();
     createVertexBuffer();
     createDescriptorSets(palette);
@@ -158,7 +158,7 @@ void LissajousStyle::createDescriptorPool()
 }
 
 // Lissajous graphics pipeline
-void LissajousStyle::createPipeline(vk::RenderPass renderPass)
+void LissajousStyle::createPipeline(vk::Format colorFormat)
 {
     const vk::raii::Device &device = (*m_deps.device);
 
@@ -250,7 +250,12 @@ void LissajousStyle::createPipeline(vk::RenderPass renderPass)
 
     m_pipelineLayout = device.createPipelineLayout(layoutInfo);
 
+    vk::PipelineRenderingCreateInfo renderingInfo{};
+    renderingInfo.colorAttachmentCount    = 1;
+    renderingInfo.pColorAttachmentFormats = &colorFormat;
+
     vk::GraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.pNext = &renderingInfo;
     pipelineInfo.stageCount = 2;
     pipelineInfo.pStages = shaderStages;
     pipelineInfo.pVertexInputState = &vertexInputInfo;
@@ -262,7 +267,7 @@ void LissajousStyle::createPipeline(vk::RenderPass renderPass)
     pipelineInfo.pColorBlendState = &colorBlending;
     pipelineInfo.pDynamicState = &dynamicState;
     pipelineInfo.layout = *m_pipelineLayout;
-    pipelineInfo.renderPass = renderPass;
+    pipelineInfo.renderPass = nullptr; // must be null with dynamic rendering
     pipelineInfo.subpass = 0;
     pipelineInfo.basePipelineHandle = nullptr;
 
