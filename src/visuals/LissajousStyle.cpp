@@ -251,7 +251,7 @@ void LissajousStyle::createPipeline(vk::Format colorFormat)
     m_pipelineLayout = device.createPipelineLayout(layoutInfo);
 
     vk::PipelineRenderingCreateInfo renderingInfo{};
-    renderingInfo.colorAttachmentCount    = 1;
+    renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachmentFormats = &colorFormat;
 
     vk::GraphicsPipelineCreateInfo pipelineInfo{};
@@ -413,31 +413,38 @@ void LissajousStyle::update(const float *magnitudes, uint32_t count, float delta
     }
     treble /= 121.0f;
 
-    // map bands to Lissajous parameters
+    // normalize each band to 0..1 (magnitudes are small, ~0..0.08 typical)
+    float bassN = bass * 60.0f;
+    float midN = mid * 60.0f;
+    float trebleN = treble * 80.0f;
+    if (bassN > 1.0f)
+    {
+        bassN = 1.0f;
+    }
+    if (midN > 1.0f)
+    {
+        midN = 1.0f;
+    }
+    if (trebleN > 1.0f)
+    {
+        trebleN = 1.0f;
+    }
+    // bass drives x-freq ratio a: 1 (ellipse) -> 3 (trefoil x)
+    float a = 1.0f + bassN * 2.0f;
 
-    // freq ratios: 1.0=circle, higher more complex
-    float a = 0.5f + bass * 16.0f * 4.0f;
-    float b = 10.0f + treble * 8.0f * 4.0f;
+    // treble drives y-freq ratio b: 1 (simple) -> 5 (five y-lobes)
+    float b = 1.0f + trebleN * 4.0f;
 
-    // near-integer so curve closes cleanly
-    if (a > 5.0f)
-        a = 5.0f;
-    if (a < 1.0f)
-        a = 1.0f;
-    if (b > 5.0f)
-        b = 5.0f;
-    if (b < 1.0f)
-        b = 1.0f;
+    // mid drives phase shift: 0 (closed figure) -> pi (fully open/tilted)
+    float delta = midN * (float)M_PI;
 
-    // phase offset for tilt
-    float delta = mid * 12.0f * (float)M_PI;
-
-    // amplitude from bass, min to stay visible
-    float amplitude = bass * 8.0f * 0.8f + 0.2f;
+    // amplitude from overall energy, stays visible
+    float energy = (bassN + midN + trebleN) / 3.0f;
+    float amplitude = 0.15f + energy * 0.85f;
     if (amplitude > 1.0f)
+    {
         amplitude = 1.0f;
-    if (amplitude < 0.1f)
-        amplitude = 0.1f;
+    }
 
     // curve points
     struct Vec2

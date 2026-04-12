@@ -34,10 +34,8 @@ class Pipeline
     }
 
   private:
-    vk::raii::ShaderModule createShaderModule(
-        const vk::raii::Device &device,
-        const std::vector<char> &code
-    ) const;
+    vk::raii::ShaderModule
+    createShaderModule(const vk::raii::Device &device, const std::vector<char> &code) const;
 
     static std::vector<char> readFile(const std::string &path);
 

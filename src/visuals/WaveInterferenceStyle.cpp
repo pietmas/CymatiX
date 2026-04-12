@@ -235,7 +235,7 @@ void WaveInterferenceStyle::createPipeline(vk::Format colorFormat)
     m_pipelineLayout = device.createPipelineLayout(layoutInfo);
 
     vk::PipelineRenderingCreateInfo renderingInfo{};
-    renderingInfo.colorAttachmentCount    = 1;
+    renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachmentFormats = &colorFormat;
 
     vk::GraphicsPipelineCreateInfo pipelineInfo{};

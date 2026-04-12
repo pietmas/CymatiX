@@ -41,11 +41,7 @@ Pipeline::createShaderModule(const vk::raii::Device &device, const std::vector<c
 }
 
 // build graphics pipeline, shaders + fixed-function state
-void Pipeline::init(
-    const VulkanContext &ctx,
-    const Swapchain &swapchain,
-    vk::Format colorFormat
-)
+void Pipeline::init(const VulkanContext &ctx, const Swapchain &swapchain, vk::Format colorFormat)
 {
     (void)swapchain; // extent no longer needed, viewport/scissor are dynamic
 
@@ -121,7 +117,7 @@ void Pipeline::init(
 
     // tell the pipeline what format the color attachment will have at draw time
     vk::PipelineRenderingCreateInfo renderingInfo{};
-    renderingInfo.colorAttachmentCount    = 1;
+    renderingInfo.colorAttachmentCount = 1;
     renderingInfo.pColorAttachmentFormats = &colorFormat;
 
     vk::GraphicsPipelineCreateInfo pipelineInfo{};

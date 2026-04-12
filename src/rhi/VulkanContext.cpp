@@ -327,6 +327,19 @@ std::vector<const char *> VulkanContext::getRequiredExtensions() const
     {
         extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
     }
+
+#ifndef NDEBUG
+    printf("[VulkanContext] enabled instance extensions (%zu):\n", extensions.size());
+    for (const char *ext : extensions)
+        printf("  %s\n", ext);
+    printf("[VulkanContext] enabled device extensions (%zu):\n", m_deviceExtensions.size());
+    for (const char *ext : m_deviceExtensions)
+        printf("  %s\n", ext);
+    printf("[VulkanContext] enabled validation layers (%zu):\n", m_validationLayers.size());
+    for (const char *layer : m_validationLayers)
+        printf("  %s\n", layer);
+#endif
+
     return extensions;
 }
 

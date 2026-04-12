@@ -2,7 +2,8 @@
 
 #include <audio/AudioEngine.h>
 #include <audio/FFTProcessor.h>
-#include <palette/BioluminescentPalette.h>
+#include <palette/IPalette.h>
+#include <palette/PaletteRegistry.h>
 #include <rhi/CommandPool.h>
 #include <rhi/Swapchain.h>
 #include <rhi/Sync.h>
@@ -13,6 +14,7 @@
 
 #include <deque>
 #include <memory>
+#include <string>
 #include <vector>
 
 struct GLFWwindow;
@@ -41,6 +43,8 @@ class App
     void update();
     void recreateSwapchain();
     rhi::VulkanDeps makeDeps() const;
+    void switchStyle(const std::string &name);
+    void switchPalette(const std::string &name);
 
     static void framebufferResizeCallback(GLFWwindow *window, int width, int height);
 
@@ -52,7 +56,8 @@ class App
     std::unique_ptr<rhi::Sync> m_sync;
 
     // visual style and palette
-    palette::BioluminescentPalette m_palette; // value type, no GPU resources
+    palette::PaletteRegistry m_paletteRegistry;
+    std::unique_ptr<palette::IPalette> m_activePalette;
     visuals::VisualStyleRegistry m_styleRegistry;
     std::unique_ptr<visuals::IVisualStyle> m_activeStyle;
 

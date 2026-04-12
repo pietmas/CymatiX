@@ -1,5 +1,7 @@
 #include <app/App.h>
 #include <app/Config.h>
+#include <palette/BioluminescentPalette.h>
+#include <palette/CyberpunkPalette.h>
 #include <visuals/LissajousStyle.h>
 #include <visuals/WaveInterferenceStyle.h>
 
@@ -41,6 +43,17 @@ void App::initVulkan()
     m_sync = std::make_unique<rhi::Sync>();
     m_sync->init(*m_context, m_swapchain->getImageCount());
 
+    // register palettes before styles so m_activePalette is ready
+    m_paletteRegistry.registerPalette(
+        "bioluminescent",
+        [] { return std::make_unique<palette::BioluminescentPalette>(); }
+    );
+    m_paletteRegistry.registerPalette(
+        "cyberpunk",
+        [] { return std::make_unique<palette::CyberpunkPalette>(); }
+    );
+    m_activePalette = m_paletteRegistry.create("cyberpunk");
+
     // register all styles with factory lambdas that capture deps by value
     m_styleRegistry.registerStyle(
         "lissajous",
@@ -53,7 +66,10 @@ void App::initVulkan()
         { return std::make_unique<visuals::WaveInterferenceStyle>(deps, p); }
     );
 
-    m_activeStyle = m_styleRegistry.create("lissajous", m_palette);
+    m_activeStyle = m_styleRegistry.create("lissajous", *m_activePalette);
+
+    switchStyle("lissajous");
+    switchPalette("cyberpunk");
 }
 
 // poll events, draw until window closes
@@ -219,18 +235,18 @@ void App::drawFrame()
 
     // barrier 1: transition image to color attachment layout
     vk::ImageMemoryBarrier2 toColor{};
-    toColor.srcStageMask     = vk::PipelineStageFlagBits2::eTopOfPipe;
-    toColor.srcAccessMask    = vk::AccessFlagBits2::eNone;
-    toColor.dstStageMask     = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
-    toColor.dstAccessMask    = vk::AccessFlagBits2::eColorAttachmentWrite;
-    toColor.oldLayout        = vk::ImageLayout::eUndefined;
-    toColor.newLayout        = vk::ImageLayout::eColorAttachmentOptimal;
-    toColor.image            = m_swapchain->getImages()[imageIndex];
+    toColor.srcStageMask = vk::PipelineStageFlagBits2::eTopOfPipe;
+    toColor.srcAccessMask = vk::AccessFlagBits2::eNone;
+    toColor.dstStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+    toColor.dstAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+    toColor.oldLayout = vk::ImageLayout::eUndefined;
+    toColor.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
+    toColor.image = m_swapchain->getImages()[imageIndex];
     toColor.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
 
     vk::DependencyInfo dep{};
     dep.imageMemoryBarrierCount = 1;
-    dep.pImageMemoryBarriers    = &toColor;
+    dep.pImageMemoryBarriers = &toColor;
     cmd.pipelineBarrier2(dep);
 
     // begin dynamic rendering
@@ -238,18 +254,18 @@ void App::drawFrame()
     clearColor.color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
 
     vk::RenderingAttachmentInfo colorAttachment{};
-    colorAttachment.imageView   = m_swapchain->getImageViews()[imageIndex];
+    colorAttachment.imageView = m_swapchain->getImageViews()[imageIndex];
     colorAttachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-    colorAttachment.loadOp      = vk::AttachmentLoadOp::eClear;
-    colorAttachment.storeOp     = vk::AttachmentStoreOp::eStore;
-    colorAttachment.clearValue  = clearColor;
+    colorAttachment.loadOp = vk::AttachmentLoadOp::eClear;
+    colorAttachment.storeOp = vk::AttachmentStoreOp::eStore;
+    colorAttachment.clearValue = clearColor;
 
     vk::RenderingInfo renderingInfo{};
-    renderingInfo.renderArea.offset        = vk::Offset2D{0, 0};
-    renderingInfo.renderArea.extent        = m_swapchain->getExtent();
-    renderingInfo.layerCount               = 1;
-    renderingInfo.colorAttachmentCount     = 1;
-    renderingInfo.pColorAttachments        = &colorAttachment;
+    renderingInfo.renderArea.offset = vk::Offset2D{0, 0};
+    renderingInfo.renderArea.extent = m_swapchain->getExtent();
+    renderingInfo.layerCount = 1;
+    renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.pColorAttachments = &colorAttachment;
 
     cmd.beginRendering(renderingInfo);
 
@@ -275,18 +291,18 @@ void App::drawFrame()
 
     // barrier 2: transition image back to present layout
     vk::ImageMemoryBarrier2 toPresent{};
-    toPresent.srcStageMask     = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
-    toPresent.srcAccessMask    = vk::AccessFlagBits2::eColorAttachmentWrite;
-    toPresent.dstStageMask     = vk::PipelineStageFlagBits2::eBottomOfPipe;
-    toPresent.dstAccessMask    = vk::AccessFlagBits2::eNone;
-    toPresent.oldLayout        = vk::ImageLayout::eColorAttachmentOptimal;
-    toPresent.newLayout        = vk::ImageLayout::ePresentSrcKHR;
-    toPresent.image            = m_swapchain->getImages()[imageIndex];
+    toPresent.srcStageMask = vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+    toPresent.srcAccessMask = vk::AccessFlagBits2::eColorAttachmentWrite;
+    toPresent.dstStageMask = vk::PipelineStageFlagBits2::eBottomOfPipe;
+    toPresent.dstAccessMask = vk::AccessFlagBits2::eNone;
+    toPresent.oldLayout = vk::ImageLayout::eColorAttachmentOptimal;
+    toPresent.newLayout = vk::ImageLayout::ePresentSrcKHR;
+    toPresent.image = m_swapchain->getImages()[imageIndex];
     toPresent.subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1};
 
     vk::DependencyInfo dep2{};
     dep2.imageMemoryBarrierCount = 1;
-    dep2.pImageMemoryBarriers    = &toPresent;
+    dep2.pImageMemoryBarriers = &toPresent;
     cmd.pipelineBarrier2(dep2);
     cmd.end();
 
@@ -353,6 +369,35 @@ void App::run()
     initAudio();
     mainLoop();
     shutdown();
+}
+
+// stall GPU before swapping style so the old one isnt destroyed mid-frame
+void App::switchStyle(const std::string &name)
+{
+    m_context->getDevice().waitIdle();
+    auto next = m_styleRegistry.create(name, *m_activePalette);
+    if (!next)
+    {
+        fprintf(stderr, "[App] switchStyle: unknown style '%s', keeping current\n", name.c_str());
+        return;
+    }
+    m_activeStyle = std::move(next);
+}
+
+// palette data flows via UBO next frame, no GPU stall needed
+void App::switchPalette(const std::string &name)
+{
+    auto next = m_paletteRegistry.create(name);
+    if (!next)
+    {
+        fprintf(
+            stderr,
+            "[App] switchPalette: unknown palette '%s', keeping current\n",
+            name.c_str()
+        );
+        return;
+    }
+    m_activePalette = std::move(next);
 }
 
 // GLFW resize callback

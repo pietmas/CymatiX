@@ -76,7 +76,10 @@ add_executable(cymatics
     src/visuals/WaveInterferenceStyle.cpp
     src/visuals/VisualStyleRegistry.cpp
     src/palette/BioluminescentPalette.cpp
+    src/palette/CyberpunkPalette.cpp
+    src/palette/PaletteRegistry.cpp
 )
+
 
 set_target_properties(cymatics PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY    ${CMAKE_SOURCE_DIR}
