@@ -43,6 +43,9 @@ void App::initVulkan()
     m_sync = std::make_unique<rhi::Sync>();
     m_sync->init(*m_context, m_swapchain->getImageCount());
 
+    m_uiLayer = std::make_unique<ui::UILayer>();
+    m_uiLayer->init(*m_context, *m_swapchain, m_window);
+
     // register palettes before styles so m_activePalette is ready
     m_paletteRegistry.registerPalette(
         "bioluminescent",
@@ -78,6 +81,7 @@ void App::mainLoop()
     while (!glfwWindowShouldClose(m_window))
     {
         glfwPollEvents();
+        m_uiLayer->buildFrame();
         update();
         drawFrame();
     }
@@ -178,6 +182,9 @@ void App::shutdown()
     // style owns pipeline, buffers, descriptor sets
     m_activeStyle.reset();
 
+    m_uiLayer->shutdown();
+    m_uiLayer.reset();
+
     m_sync->destroy(*m_context);
     m_commandPool->destroy(*m_context);
     m_swapchain->destroy(*m_context);
@@ -269,11 +276,13 @@ void App::drawFrame()
 
     cmd.beginRendering(renderingInfo);
 
-    // viewport + scissor to match swapchain extent
+    // viewport + scissor and leave room for the ui panel on the right
+    float vizWidth = (float)m_swapchain->getExtent().width - m_uiLayer->getPanelWidth();
+
     vk::Viewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)m_swapchain->getExtent().width;
+    viewport.width = vizWidth;
     viewport.height = (float)m_swapchain->getExtent().height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
@@ -281,11 +290,14 @@ void App::drawFrame()
 
     vk::Rect2D scissor{};
     scissor.offset = vk::Offset2D{0, 0};
-    scissor.extent = m_swapchain->getExtent();
+    scissor.extent = vk::Extent2D{(uint32_t)vizWidth, m_swapchain->getExtent().height};
     cmd.setScissor(0, {scissor});
 
     // delegate to active style
     m_activeStyle->render(cmd, (uint32_t)m_currentFrame);
+
+    // imgui draw calls appended into the same rendering block
+    m_uiLayer->renderDrawData(cmd);
 
     cmd.endRendering();
 

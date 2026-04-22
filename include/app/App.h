@@ -9,6 +9,7 @@
 #include <rhi/Sync.h>
 #include <rhi/VulkanContext.h>
 #include <rhi/VulkanDeps.h>
+#include <ui/UILayer.h>
 #include <visuals/IVisualStyle.h>
 #include <visuals/VisualStyleRegistry.h>
 
@@ -54,6 +55,7 @@ class App
     std::unique_ptr<rhi::Swapchain> m_swapchain;
     std::unique_ptr<rhi::CommandPool> m_commandPool;
     std::unique_ptr<rhi::Sync> m_sync;
+    std::unique_ptr<ui::UILayer> m_uiLayer;
 
     // visual style and palette
     palette::PaletteRegistry m_paletteRegistry;

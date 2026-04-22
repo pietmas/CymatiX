@@ -60,6 +60,10 @@ class VulkanContext
     {
         return *m_surface;
     }
+    vk::Instance getInstance() const
+    {
+        return *m_instance;
+    }
     vk::Queue getGraphicsQueue() const
     {
         return *m_graphicsQueue;

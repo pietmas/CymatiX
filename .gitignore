@@ -13,6 +13,9 @@ tutorial/
 tutorial/*.md
 
 
+# ImGui
+imgui.ini
+
 # IDE / editor
 .vscode/
 .idea/

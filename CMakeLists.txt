@@ -58,6 +58,33 @@ set(KISSFFT_PKGCONFIG   OFF CACHE BOOL  "" FORCE)
 set(KISSFFT_INSTALL     OFF CACHE BOOL  "" FORCE)
 FetchContent_MakeAvailable(kissfft)
 
+# Dear ImGui (docking branch)
+FetchContent_Declare(
+    imgui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG        v1.91.9-docking
+    GIT_SHALLOW    TRUE
+)
+FetchContent_GetProperties(imgui)
+if(NOT imgui_POPULATED)
+    FetchContent_Populate(imgui)
+endif()
+
+add_library(imgui_lib STATIC
+    ${imgui_SOURCE_DIR}/imgui.cpp
+    ${imgui_SOURCE_DIR}/imgui_demo.cpp
+    ${imgui_SOURCE_DIR}/imgui_draw.cpp
+    ${imgui_SOURCE_DIR}/imgui_tables.cpp
+    ${imgui_SOURCE_DIR}/imgui_widgets.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.cpp
+    ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+)
+target_include_directories(imgui_lib PUBLIC
+    ${imgui_SOURCE_DIR}
+    ${imgui_SOURCE_DIR}/backends
+)
+target_link_libraries(imgui_lib PUBLIC Vulkan::Vulkan glfw)
+
 # Shaders
 include(cmake/CompileShaders.cmake)
 
@@ -78,6 +105,7 @@ add_executable(cymatics
     src/palette/BioluminescentPalette.cpp
     src/palette/CyberpunkPalette.cpp
     src/palette/PaletteRegistry.cpp
+    src/ui/UILayer.cpp
 )
 
 
@@ -100,6 +128,7 @@ target_link_libraries(cymatics PRIVATE
     glfw
     glm::glm
     kissfft::kissfft-float
+    imgui_lib
 )
 
 if(UNIX)
