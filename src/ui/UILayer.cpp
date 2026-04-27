@@ -1,3 +1,4 @@
+#include <app/App.h>
 #include <rhi/Swapchain.h>
 #include <rhi/VulkanContext.h>
 #include <ui/UILayer.h>
@@ -14,7 +15,8 @@
 void ui::UILayer::init(
     const rhi::VulkanContext &ctx,
     const rhi::Swapchain &swapchain,
-    GLFWwindow *window
+    GLFWwindow *window,
+    App &app
 )
 {
     // imgui needs its own pool for the font texture sampler
@@ -65,6 +67,8 @@ void ui::UILayer::init(
     // upload fonts, no-arg form handles the one-time submit internally
     ImGui_ImplVulkan_CreateFontsTexture();
 
+    m_controlPanel = std::make_unique<ControlPanel>(app);
+
     printf("[UILayer] imgui initialized with dynamic rendering\n");
 }
 
@@ -75,16 +79,25 @@ void ui::UILayer::buildFrame()
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
+    // Tab toggles the panel, visuals go full-screen when hidden
+    if (ImGui::IsKeyPressed(ImGuiKey_Tab))
+        m_showPanel = !m_showPanel;
+
     // passthru dockspace
     ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
-    // pin demo window to the right edge on each startup
-    ImGuiIO &io = ImGui::GetIO();
-    ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x - 400.0f, 0.0f), ImGuiCond_Once);
-    ImGui::SetNextWindowSize(ImVec2(400.0f, io.DisplaySize.y), ImGuiCond_Once);
-    ImGui::ShowDemoWindow();
+    if (m_showPanel)
+        m_controlPanel->draw();
 
     ImGui::Render();
+}
+
+// 20% of current display width when visible, 0 when hidden
+float ui::UILayer::getPanelWidth() const
+{
+    if (!m_showPanel)
+        return 0.0f;
+    return ImGui::GetIO().DisplaySize.x * 0.2f;
 }
 
 // inject imgui draw calls into the active rendering block

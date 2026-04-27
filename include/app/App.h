@@ -33,6 +33,13 @@ class App
 
     void run();
 
+    void setActiveStyle(const std::string &name);
+    void setActivePalette(const std::string &name);
+    std::vector<std::string> getStyleNames() const;
+    std::vector<std::string> getPaletteNames() const;
+
+    float audioGain = 1.0f;
+
   private:
     void initWindow();
     void initVulkan();
@@ -44,8 +51,6 @@ class App
     void update();
     void recreateSwapchain();
     rhi::VulkanDeps makeDeps() const;
-    void switchStyle(const std::string &name);
-    void switchPalette(const std::string &name);
 
     static void framebufferResizeCallback(GLFWwindow *window, int width, int height);
 
@@ -62,6 +67,7 @@ class App
     std::unique_ptr<palette::IPalette> m_activePalette;
     visuals::VisualStyleRegistry m_styleRegistry;
     std::unique_ptr<visuals::IVisualStyle> m_activeStyle;
+    std::string m_activeStyleName;
 
     // audio subsystem
     std::unique_ptr<audio::AudioEngine> m_audioEngine;

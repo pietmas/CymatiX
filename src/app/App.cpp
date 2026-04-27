@@ -7,6 +7,7 @@
 
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 
@@ -44,7 +45,7 @@ void App::initVulkan()
     m_sync->init(*m_context, m_swapchain->getImageCount());
 
     m_uiLayer = std::make_unique<ui::UILayer>();
-    m_uiLayer->init(*m_context, *m_swapchain, m_window);
+    m_uiLayer->init(*m_context, *m_swapchain, m_window, *this);
 
     // register palettes before styles so m_activePalette is ready
     m_paletteRegistry.registerPalette(
@@ -71,8 +72,8 @@ void App::initVulkan()
 
     m_activeStyle = m_styleRegistry.create("lissajous", *m_activePalette);
 
-    switchStyle("lissajous");
-    switchPalette("cyberpunk");
+    setActiveStyle("lissajous");
+    setActivePalette("cyberpunk");
 }
 
 // poll events, draw until window closes
@@ -147,7 +148,14 @@ void App::update()
     for (size_t i = 0; i < mags.size(); i++)
         m_smoothedMags[i] += kSmooth * (mags[i] - m_smoothedMags[i]);
 
-    m_activeStyle->update(m_smoothedMags.data(), (uint32_t)m_smoothedMags.size(), dt);
+    // apply gain to a copy, don't modify m_smoothedMags or EMA drifts next frame
+    float g = std::clamp(audioGain, 0.0f, 4.0f);
+    static std::vector<float> gained;
+    gained.resize(m_smoothedMags.size());
+    for (size_t i = 0; i < m_smoothedMags.size(); i++)
+        gained[i] = m_smoothedMags[i] * g;
+
+    m_activeStyle->update(gained.data(), (uint32_t)gained.size(), dt);
 
     // print dominant bin once/sec ca (at 60 fps)
     m_debugFrameCount++;
@@ -384,32 +392,58 @@ void App::run()
 }
 
 // stall GPU before swapping style so the old one isnt destroyed mid-frame
-void App::switchStyle(const std::string &name)
+void App::setActiveStyle(const std::string &name)
 {
     m_context->getDevice().waitIdle();
     auto next = m_styleRegistry.create(name, *m_activePalette);
     if (!next)
     {
-        fprintf(stderr, "[App] switchStyle: unknown style '%s', keeping current\n", name.c_str());
+        fprintf(
+            stderr,
+            "[App] setActiveStyle: unknown style '%s', keeping current\n",
+            name.c_str()
+        );
         return;
     }
     m_activeStyle = std::move(next);
+    m_activeStyleName = name;
 }
 
-// palette data flows via UBO next frame, no GPU stall needed
-void App::switchPalette(const std::string &name)
+// switching palette requires recreating the style so it picks up the new colors
+void App::setActivePalette(const std::string &name)
 {
     auto next = m_paletteRegistry.create(name);
     if (!next)
     {
         fprintf(
             stderr,
-            "[App] switchPalette: unknown palette '%s', keeping current\n",
+            "[App] setActivePalette: unknown palette '%s', keeping current\n",
             name.c_str()
         );
         return;
     }
     m_activePalette = std::move(next);
+
+    // recreate active style with new palette so colors take effect immediately
+    if (!m_activeStyleName.empty())
+    {
+        m_context->getDevice().waitIdle();
+        auto newStyle = m_styleRegistry.create(m_activeStyleName, *m_activePalette);
+        if (newStyle)
+            m_activeStyle = std::move(newStyle);
+    }
+}
+
+// return registered style names in insertion order
+std::vector<std::string> App::getStyleNames() const
+{
+    return m_styleRegistry.listNames();
+}
+
+// return registered palette names in insertion order
+std::vector<std::string> App::getPaletteNames() const
+{
+    return m_paletteRegistry.listNames();
 }
 
 // GLFW resize callback
