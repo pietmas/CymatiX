@@ -99,6 +99,10 @@ WaveInterferenceStyle::WaveInterferenceStyle(
 )
     : m_deps(deps), m_extent(deps.extent)
 {
+    // initalize drop pool with old hit times so they're invisible at startup
+    for (int i = 0; i < NUM_DROPS; i++)
+        m_drops[i] = {0.0f, 0.0f, -1000.0f, DROP_SIGMA};
+
     createDescriptorSetLayout();
     createDescriptorPool();
     createPipeline(m_deps.colorFormat);
@@ -347,16 +351,95 @@ void WaveInterferenceStyle::createDescriptorSets(const palette::IPalette &palett
     }
 }
 
+// LCG helper, Numerical Recipes constants
+static float lcgFloat(uint32_t &state)
+{
+    state = state * 1664525u + 1013904223u;
+    return (float)(state >> 8) * (1.0f / 16777216.0f);
+}
+
 // per-frame logic
 
-// shader does wave math procedurally
+// compute band energies, manage drop pool, pack drops into UBO
 void WaveInterferenceStyle::update(const float *magnitudes, uint32_t count, float deltaTime)
 {
     m_time += deltaTime;
 
-    uint32_t bins = (count < MAX_SPECTRUM_BINS) ? count : MAX_SPECTRUM_BINS;
-    memcpy(m_pendingSpectrum.magnitudes, magnitudes, bins * sizeof(float));
+    float bassSum = 0.0f, midSum = 0.0f, trebleSum = 0.0f;
+    if (magnitudes && count >= 201)
+    {
+        for (uint32_t i = 1; i <= 10; i++)
+        {
+            bassSum += magnitudes[i];
+        }
+        for (uint32_t i = 11; i <= 79; i++)
+        {
+            midSum += magnitudes[i];
+        }
+        for (uint32_t i = 80; i <= 200; i++)
+        {
+            trebleSum += magnitudes[i];
+        }
+    }
+
+    // normalize each band to [0, 1]
+    float bassNorm = bassSum / 10.0f * 8.0f;
+    float midNorm = midSum / 69.0f * 4.0f;
+    float trebleNorm = trebleSum / 121.0f * 4.0f;
+    if (bassNorm > 1.0f)
+    {
+        bassNorm = 1.0f;
+    }
+    if (midNorm > 1.0f)
+    {
+        midNorm = 1.0f;
+    }
+    if (trebleNorm > 1.0f)
+    {
+        trebleNorm = 1.0f;
+    }
+
+    // bass onset detection
+    m_spawnCooldown -= deltaTime;
+    m_idleTimer += deltaTime;
+
+    bool onset = (bassNorm > m_prevBass + 0.125f) && (m_spawnCooldown <= 0.0f);
+    bool fallback = (m_idleTimer >= 1.0f) && (m_spawnCooldown <= 0.0f);
+    m_prevBass = bassNorm;
+
+    if (onset || fallback)
+    {
+        m_spawnCooldown = 0.15f;
+        m_idleTimer = 0.0f;
+
+        // find oldest drop -- smallest hitTime
+        int oldest = 0;
+        for (int i = 1; i < NUM_DROPS; i++)
+        {
+            if (m_drops[i].hitTime < m_drops[oldest].hitTime)
+            {
+                oldest = i;
+            }
+        }
+
+        // LCG random position across full screen [-1, 1]
+        float rx = lcgFloat(m_lcgState) * 2.0f - 1.0f;
+        float ry = lcgFloat(m_lcgState) * 2.0f - 1.0f;
+        m_drops[oldest] = {rx, ry, m_time, DROP_SIGMA};
+    }
+
+    // pack drop pool into float indices 256..303 (vec4 indices 64..75 in shader)
+    for (int i = 0; i < NUM_DROPS; i++)
+    {
+        m_pendingSpectrum.magnitudes[256 + i * 4 + 0] = m_drops[i].x;
+        m_pendingSpectrum.magnitudes[256 + i * 4 + 1] = m_drops[i].y;
+        m_pendingSpectrum.magnitudes[256 + i * 4 + 2] = m_drops[i].hitTime;
+        m_pendingSpectrum.magnitudes[256 + i * 4 + 3] = m_drops[i].sigma;
+    }
+
     m_pendingSpectrum.time = m_time;
+    m_pendingSpectrum._pad[0] = midNorm;    // mid energy for shader
+    m_pendingSpectrum._pad[1] = trebleNorm; // treble energy for shader
 }
 
 void WaveInterferenceStyle::render(vk::CommandBuffer cmd, uint32_t frameIndex)

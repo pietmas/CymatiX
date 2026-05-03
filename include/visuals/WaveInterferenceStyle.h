@@ -56,6 +56,20 @@ class WaveInterferenceStyle : public IVisualStyle
 
     SpectrumUBOData m_pendingSpectrum{};
     float m_time = 0.0f;
+
+    static constexpr int NUM_DROPS = 12;
+    static constexpr float DROP_SIGMA = 0.030f;
+
+    struct Drop
+    {
+        float x, y, hitTime, sigma;
+    };
+
+    Drop m_drops[NUM_DROPS]{};
+    float m_spawnCooldown = 0.0f; // debounce window after a spawn
+    float m_idleTimer = 0.0f;     // time since last spawn
+    float m_prevBass = 0.0f;      // bass energy last frame,
+    uint32_t m_lcgState = 12345u;
 };
 
 } // namespace visuals

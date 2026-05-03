@@ -64,6 +64,11 @@ class LissajousStyle : public IVisualStyle
 
     SpectrumUBOData m_pendingSpectrum{};
     float m_time = 0.0f;
+
+    // smoothed frequency-ratio targets
+    float m_aSmooth = 1.0f;    // x-freq ratio
+    float m_bSmooth = 2.0f;    // y-freq ratio (a+1)
+    float m_deltaPhase = 0.0f; // animated phase offset
 };
 
 } // namespace visuals

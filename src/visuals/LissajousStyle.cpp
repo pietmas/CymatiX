@@ -389,82 +389,66 @@ void LissajousStyle::update(const float *magnitudes, uint32_t count, float delta
 
     // extract band energies
 
-    // bass: bins 1..10 (skip bin 0)
+    // bass: bins 1..10
     float bass = 0.0f;
     for (uint32_t i = 1; i <= 10 && i < count; i++)
-    {
         bass += magnitudes[i];
-    }
     bass /= 10.0f;
 
     // mid: bins 11..79
     float mid = 0.0f;
     for (uint32_t i = 11; i <= 79 && i < count; i++)
-    {
         mid += magnitudes[i];
-    }
     mid /= 69.0f;
 
     // treble: bins 80..200
     float treble = 0.0f;
     for (uint32_t i = 80; i <= 200 && i < count; i++)
-    {
         treble += magnitudes[i];
-    }
     treble /= 121.0f;
 
-    // normalize each band to 0..1 (magnitudes are small, ~0..0.08 typical)
-    float bassN = bass * 60.0f;
-    float midN = mid * 60.0f;
-    float trebleN = treble * 80.0f;
-    if (bassN > 1.0f)
-    {
-        bassN = 1.0f;
-    }
-    if (midN > 1.0f)
-    {
-        midN = 1.0f;
-    }
-    if (trebleN > 1.0f)
-    {
-        trebleN = 1.0f;
-    }
-    // bass drives x-freq ratio a: 1 (ellipse) -> 3 (trefoil x)
-    float a = 1.0f + bassN * 2.0f;
+    // normalize to 0..1
+    float bassN = std::min(bass * 60.0f, 1.0f);
+    float midN = std::min(mid * 60.0f, 1.0f);
+    float trebleN = std::min(treble * 80.0f, 1.0f);
 
-    // treble drives y-freq ratio b: 1 (simple) -> 5 (five y-lobes)
-    float b = 1.0f + trebleN * 4.0f;
+    // bass selects a from {1, 2, 3}; b is always a+1:
+    //   a=1 b=2 -> figure-8 / lemniscate
+    //   a=2 b=3 -> three-leaf pretzel
+    //   a=3 b=4 -> four-leaf pattern
+    int aTarget = 1 + (int)(bassN * 2.99f);
+    int bTarget = aTarget + 1;
 
-    // mid drives phase shift: 0 (closed figure) -> pi (fully open/tilted)
-    float delta = midN * (float)M_PI;
+    // slow EMA toward target so the figure morphs instead of snapping
+    m_aSmooth += 0.04f * ((float)aTarget - m_aSmooth);
+    m_bSmooth += 0.04f * ((float)bTarget - m_bSmooth);
 
-    // amplitude from overall energy, stays visible
+    // mid animates the phase offset so figure breathes and rotates with the melody
+    m_deltaPhase += deltaTime * midN * (float)M_PI * 2.0f;
+
+    // amplitude from overall energy, never collapses to a dot
     float energy = (bassN + midN + trebleN) / 3.0f;
-    float amplitude = 0.15f + energy * 0.85f;
-    if (amplitude > 1.0f)
-    {
-        amplitude = 1.0f;
-    }
+    float amplitude = std::min(0.3f + energy * 0.7f, 1.0f);
 
-    // curve points
+    // generate curve vertices
     struct Vec2
     {
-        float x;
-        float y;
+        float x, y;
     };
     auto *pts = reinterpret_cast<Vec2 *>(m_vertexMapped);
-
     for (uint32_t i = 0; i < N_POINTS; i++)
     {
         float t = (float)i / (float)(N_POINTS - 1) * 2.0f * (float)M_PI;
-        pts[i].x = amplitude * sinf(a * t + delta);
-        pts[i].y = amplitude * sinf(b * t);
+        pts[i].x = amplitude * sinf(m_aSmooth * t + m_deltaPhase);
+        pts[i].y = amplitude * sinf(m_bSmooth * t);
     }
 
-    // cache spectrum for render
+    // cache spectrum for render; pack treble into _pad[0] so the fragment
+    // shader can use it as a per-frame brightness multiplier
     uint32_t bins = (count < MAX_SPECTRUM_BINS) ? count : MAX_SPECTRUM_BINS;
     memcpy(m_pendingSpectrum.magnitudes, magnitudes, bins * sizeof(float));
     m_pendingSpectrum.time = m_time;
+    m_pendingSpectrum._pad[0] = trebleN;
 }
 
 // upload UBO, record draw

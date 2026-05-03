@@ -23,7 +23,7 @@ palette;
 layout(location = 0) in vec2 inUV;
 layout(location = 0) out vec4 outColor;
 
-// interpolate between palette color stops, same function as lissajous.frag
+// interpolate between palette color stops
 vec4 samplePalette(float t)
 {
     t = clamp(t, 0.0, 1.0);
@@ -43,48 +43,35 @@ vec4 samplePalette(float t)
     return mix(palette.colors[lo], palette.colors[hi], frac);
 }
 
-// average a range of FFT magnitude bins
-float avgBins(int lo, int hi)
-{
-    float sum = 0.0;
-    for (int i = lo; i <= hi; i++)
-        sum += ubo.magnitudes[i / 4][i % 4]; // magnitudes is vec4[256], index float by (vec,component)
-    return sum / float(hi - lo + 1);
-}
-
 void main()
 {
-    float t = ubo.time;
     vec2 pos = inUV * 2.0 - 1.0;
 
-    // three frequency bands each drives one wave source
-    float amp0 = clamp(avgBins(1, 10) * 8.0, 0.0, 1.0);   // bass
-    float amp1 = clamp(avgBins(11, 79) * 4.0, 0.0, 1.0);  // mid
-    float amp2 = clamp(avgBins(80, 200) * 4.0, 0.0, 1.0); // treble
+    float mid = ubo._pad0;
+    float treble = ubo._pad1;
 
-    vec2 src0 = vec2(-0.5, 0.0);
-    vec2 src1 = vec2(0.5, 0.3);
-    vec2 src2 = vec2(0.0, -0.4);
+    // mid controls how fast rings expand: quiet = lazy, loud = energetic
+    float speed = mix(0.4, 1.4, mid);
+    float fadeRate = 1.5;
 
-    float r0 = distance(pos, src0);
-    float r1 = distance(pos, src1);
-    float r2 = distance(pos, src2);
-
-    // spatial frequency: controls how many wave crests per unit distance
-    float k = 18.0;
-
-    // distance decay: exp(-decay * r) makes waves fade naturally away from source
-    float decay = 2.5;
-
-    // propagating wave: amp * exp(-decay*r) * sin(k*r - speed*t)
     float wave = 0.0;
-    wave += amp0 * exp(-decay * r0) * sin(k * r0 - t * (3.0 + amp0 * 2.0));
-    wave += amp1 * exp(-decay * r1) * sin(k * r1 - t * (3.5 + amp1 * 1.5));
-    wave += amp2 * exp(-decay * r2) * sin(k * r2 - t * (4.0 + amp2 * 1.5));
 
-    wave = wave / 3.0 * 0.5 + 0.5;
+    // drops packed at vec4 indices 64..75
+    for (int i = 0; i < 12; i++)
+    {
+        vec4 drop = ubo.magnitudes[64 + i]; // (x, y, hitTime, sigma)
+        float age = ubo.time - drop.z;
+        if (age < 0.0)
+            continue;
 
-    wave = smoothstep(0.4, 0.6, wave);
+        float sig = drop.w;
+        float dr = distance(pos, drop.xy) - age * speed;
+        wave += exp(-dr * dr / (sig * sig)) * exp(-fadeRate * age);
+    }
 
-    outColor = samplePalette(wave);
+    vec4 col = samplePalette(wave);
+
+    // treble boosts scene brightness
+    float brightness = 1.0 + treble * 1.5;
+    outColor = vec4(col.rgb * brightness, 1.0);
 }

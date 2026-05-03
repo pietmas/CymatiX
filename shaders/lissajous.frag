@@ -4,7 +4,7 @@ layout(set = 0, binding = 0) uniform SpectrumUBO
 {
     vec4 magnitudes[256]; // 256 vec4s = 1024 floats, correct std140 stride
     float time;
-    float _pad0;
+    float treble;
     float _pad1;
     float _pad2;
 }
@@ -51,5 +51,8 @@ void main()
 
     // fade alpha at the start and end of the curve for a smooth look
     float alpha = sin(inT * 3.14159265);
-    outColor = vec4(color.rgb, color.a * alpha * 0.9);
+
+    // treble boosts brightness on high-frequency
+    float brightness = 0.6 + ubo.treble * 1.4;
+    outColor = vec4(color.rgb * brightness, color.a * alpha * 0.9);
 }
