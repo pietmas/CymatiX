@@ -5,8 +5,35 @@
 
 #include <vector>
 
-// store app ref, start as first registered style/palette
-ui::ControlPanel::ControlPanel(App &app) : m_app(app) {}
+// store app ref, init dropdown indices to match current active style and palette
+ui::ControlPanel::ControlPanel(App &app) : m_app(app)
+{
+    // find index of the active style so the combo starts on the right item
+    auto styleNames = app.getStyleNames();
+    std::string activStyle = app.getActiveStyleName();
+    for (int i = 0; i < (int)styleNames.size(); i++)
+    {
+        if (styleNames[i] == activStyle)
+        {
+            m_styleIndex = i;
+            break;
+        }
+    }
+
+    // same for palette
+    auto paletteNames = app.getPaletteNames();
+    std::string activPalette = app.getActivePaletteName();
+    for (int i = 0; i < (int)paletteNames.size(); i++)
+    {
+        if (paletteNames[i] == activPalette)
+        {
+            m_paletteIndex = i;
+            break;
+        }
+    }
+
+    m_inputSelector = std::make_unique<InputSelector>(app);
+}
 
 // draw controls panel: style combo, palette combo, gain slider
 void ui::ControlPanel::draw()
@@ -27,7 +54,9 @@ void ui::ControlPanel::draw()
     std::vector<const char *> styleItems;
     styleItems.reserve(styleNames.size());
     for (const auto &s : styleNames)
+    {
         styleItems.push_back(s.c_str());
+    }
 
     if (ImGui::Combo("Style", &m_styleIndex, styleItems.data(), (int)styleItems.size()))
         m_app.setActiveStyle(styleNames[m_styleIndex]);
@@ -36,13 +65,22 @@ void ui::ControlPanel::draw()
     std::vector<const char *> paletteItems;
     paletteItems.reserve(paletteNames.size());
     for (const auto &s : paletteNames)
+    {
         paletteItems.push_back(s.c_str());
+    }
 
     if (ImGui::Combo("Palette", &m_paletteIndex, paletteItems.data(), (int)paletteItems.size()))
+    {
         m_app.setActivePalette(paletteNames[m_paletteIndex]);
+    }
 
     // gain slider, range 0.0 to 4.0
     ImGui::SliderFloat("Gain", &m_app.audioGain, 0.0f, 4.0f);
+
+    ImGui::Separator();
+
+    // audio input source selector, embedded in the same panel
+    m_inputSelector->draw();
 
     ImGui::End();
 }

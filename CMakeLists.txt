@@ -107,6 +107,7 @@ add_executable(cymatics
     src/palette/PaletteRegistry.cpp
     src/ui/UILayer.cpp
     src/ui/ControlPanel.cpp
+    src/ui/InputSelector.cpp
 )
 
 

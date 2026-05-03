@@ -1,5 +1,6 @@
 #pragma once
 
+#include <app/SharedTypes.h>
 #include <audio/AudioEngine.h>
 #include <audio/FFTProcessor.h>
 #include <palette/IPalette.h>
@@ -37,8 +38,11 @@ class App
     void setActivePalette(const std::string &name);
     std::vector<std::string> getStyleNames() const;
     std::vector<std::string> getPaletteNames() const;
+    std::string getActiveStyleName() const;
+    std::string getActivePaletteName() const;
 
     float audioGain = 1.0f;
+    AudioSource audioSource = AudioSource::File;
 
   private:
     void initWindow();
@@ -74,6 +78,7 @@ class App
     std::unique_ptr<audio::FFTProcessor> m_fftProcessor;
     std::deque<float> m_audioHistory;  // sliding window for FFT
     std::vector<float> m_smoothedMags; // EMA-smoothed FFT output
+    std::string m_activePaletteName;
 
     int m_currentFrame = 0;
     bool m_framebufferResized = false;

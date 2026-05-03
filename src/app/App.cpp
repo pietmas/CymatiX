@@ -56,7 +56,8 @@ void App::initVulkan()
         "cyberpunk",
         [] { return std::make_unique<palette::CyberpunkPalette>(); }
     );
-    m_activePalette = m_paletteRegistry.create("cyberpunk");
+    m_activePalette = m_paletteRegistry.create("bioluminescent");
+    m_activePaletteName = "bioluminescent";
 
     // register all styles with factory lambdas that capture deps by value
     m_styleRegistry.registerStyle(
@@ -71,9 +72,10 @@ void App::initVulkan()
     );
 
     m_activeStyle = m_styleRegistry.create("lissajous", *m_activePalette);
+    m_activeStyleName = "lissajous";
 
-    setActiveStyle("lissajous");
-    setActivePalette("cyberpunk");
+    // setActiveStyle("lissajous");   // panel drives this now
+    // setActivePalette("cyberpunk"); //panel drives this now
 }
 
 // poll events, draw until window closes
@@ -97,7 +99,7 @@ void App::initAudio()
     m_fftProcessor = std::make_unique<audio::FFTProcessor>(2048);
 
     // place audio file next to executable; WAV, MP3, FLAC, OGG all work
-    if (m_audioEngine->load("test/test2.wav"))
+    if (m_audioEngine->load("test/test3.mp3"))
         m_audioEngine->play();
     else
         printf("[App] tip: place test/test2.wav next to the executable\n");
@@ -423,6 +425,7 @@ void App::setActivePalette(const std::string &name)
         return;
     }
     m_activePalette = std::move(next);
+    m_activePaletteName = name;
 
     // recreate active style with new palette so colors take effect immediately
     if (!m_activeStyleName.empty())
@@ -444,6 +447,18 @@ std::vector<std::string> App::getStyleNames() const
 std::vector<std::string> App::getPaletteNames() const
 {
     return m_paletteRegistry.listNames();
+}
+
+// return currently active style name
+std::string App::getActiveStyleName() const
+{
+    return m_activeStyleName;
+}
+
+// return currently active palette name
+std::string App::getActivePaletteName() const
+{
+    return m_activePaletteName;
 }
 
 // GLFW resize callback

@@ -26,3 +26,9 @@ struct alignas(16) PaletteUBOData
     float _pad[3];
 };
 // sizeof(PaletteUBOData) == 144
+enum class AudioSource
+{
+    File,
+    Microphone,
+    Loopback
+};
