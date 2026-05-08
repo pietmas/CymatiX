@@ -100,9 +100,13 @@ void App::initAudio()
 
     // place audio file next to executable; WAV, MP3, FLAC, OGG all work
     if (m_audioEngine->load("test/test3.mp3"))
+    {
         m_audioEngine->play();
+    }
     else
+    {
         printf("[App] tip: place test/test2.wav next to the executable\n");
+    }
 }
 
 // drain ring buffer, slide window, run FFT each frame
@@ -144,19 +148,23 @@ void App::update()
 
     // EMA smoothing on FFT
     if (m_smoothedMags.size() != mags.size())
+    {
         m_smoothedMags.assign(mags.size(), 0.0f);
+    }
 
     constexpr float kSmooth = 0.2f;
     for (size_t i = 0; i < mags.size(); i++)
+    {
         m_smoothedMags[i] += kSmooth * (mags[i] - m_smoothedMags[i]);
-
+    }
     // apply gain to a copy, don't modify m_smoothedMags or EMA drifts next frame
     float g = std::clamp(audioGain, 0.0f, 4.0f);
     static std::vector<float> gained;
     gained.resize(m_smoothedMags.size());
     for (size_t i = 0; i < m_smoothedMags.size(); i++)
+    {
         gained[i] = m_smoothedMags[i] * g;
-
+    }
     m_activeStyle->update(gained.data(), (uint32_t)gained.size(), dt);
 
     // print dominant bin once/sec ca (at 60 fps)
@@ -433,7 +441,9 @@ void App::setActivePalette(const std::string &name)
         m_context->getDevice().waitIdle();
         auto newStyle = m_styleRegistry.create(m_activeStyleName, *m_activePalette);
         if (newStyle)
+        {
             m_activeStyle = std::move(newStyle);
+        }
     }
 }
 

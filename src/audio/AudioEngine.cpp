@@ -39,7 +39,9 @@ dataCallback(ma_device *pDevice, void *pOutput, const void * /*pInput*/, ma_uint
 
     // loop at EOF
     if (res == MA_AT_END || framesRead < frameCount)
+    {
         ma_decoder_seek_to_pcm_frame(&impl->decoder, 0);
+    }
 
     // mix to mono float32, push to ring buffer for FFT
     const float *src = (const float *)pOutput;
@@ -57,7 +59,9 @@ dataCallback(ma_device *pDevice, void *pOutput, const void * /*pInput*/, ma_uint
         {
             float mono = 0.0f;
             for (uint32_t c = 0; c < channels; c++)
+            {
                 mono += src[i * channels + c];
+            }
             dst[i] = mono / (float)channels;
         }
 
@@ -71,7 +75,9 @@ AudioEngine::AudioEngine() : m_impl(std::make_unique<AudioEngineImpl>()) {}
 AudioEngine::~AudioEngine()
 {
     if (!m_impl)
+    {
         return;
+    }
 
     if (m_impl->deviceInitialized)
     {
@@ -80,10 +86,14 @@ AudioEngine::~AudioEngine()
     }
 
     if (m_impl->decoderInitialized)
+    {
         ma_decoder_uninit(&m_impl->decoder);
+    }
 
     if (m_impl->rbInitialized)
+    {
         ma_rb_uninit(&m_impl->rb);
+    }
 }
 
 // load audio file, set up playback device
@@ -167,7 +177,9 @@ bool AudioEngine::load(const std::string &path)
 void AudioEngine::play()
 {
     if (!m_impl->deviceInitialized)
+    {
         return;
+    }
     ma_device_start(&m_impl->device);
     m_impl->playing = true;
 }
@@ -176,7 +188,9 @@ void AudioEngine::play()
 void AudioEngine::pause()
 {
     if (!m_impl->deviceInitialized)
+    {
         return;
+    }
     ma_device_stop(&m_impl->device);
     m_impl->playing = false;
 }
@@ -185,13 +199,17 @@ void AudioEngine::pause()
 uint32_t AudioEngine::getLatestSamples(float *buf, uint32_t count)
 {
     if (!m_impl->rbInitialized)
+    {
         return 0;
+    }
 
     void *pRead;
     size_t bytesToRead = count * sizeof(float);
 
     if (ma_rb_acquire_read(&m_impl->rb, &bytesToRead, &pRead) != MA_SUCCESS || bytesToRead == 0)
+    {
         return 0;
+    }
 
     uint32_t framesRead = (uint32_t)(bytesToRead / sizeof(float));
     memcpy(buf, pRead, framesRead * sizeof(float));

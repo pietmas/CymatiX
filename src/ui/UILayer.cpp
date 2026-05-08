@@ -81,13 +81,17 @@ void ui::UILayer::buildFrame()
 
     // Tab toggles the panel, visuals go full-screen when hidden
     if (ImGui::IsKeyPressed(ImGuiKey_Tab))
+    {
         m_showPanel = !m_showPanel;
+    }
 
     // passthru dockspace
     ImGui::DockSpaceOverViewport(0, nullptr, ImGuiDockNodeFlags_PassthruCentralNode);
 
     if (m_showPanel)
+    {
         m_controlPanel->draw();
+    }
 
     ImGui::Render();
 }
@@ -96,7 +100,9 @@ void ui::UILayer::buildFrame()
 float ui::UILayer::getPanelWidth() const
 {
     if (!m_showPanel)
+    {
         return 0.0f;
+    }
     return ImGui::GetIO().DisplaySize.x * 0.2f;
 }
 

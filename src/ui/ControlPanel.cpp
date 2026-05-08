@@ -59,7 +59,9 @@ void ui::ControlPanel::draw()
     }
 
     if (ImGui::Combo("Style", &m_styleIndex, styleItems.data(), (int)styleItems.size()))
+    {
         m_app.setActiveStyle(styleNames[m_styleIndex]);
+    }
 
     auto paletteNames = m_app.getPaletteNames();
     std::vector<const char *> paletteItems;

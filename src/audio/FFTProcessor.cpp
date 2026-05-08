@@ -23,24 +23,32 @@ FFTProcessor::FFTProcessor(int fftSize) : m_fftSize(fftSize)
 
     // Hann window: w[n] = 0.5 * (1 - cos(2*pi*n / (N-1)))
     for (int i = 0; i < m_fftSize; i++)
+    {
         m_window[i] = 0.5f * (1.0f - cosf(2.0f * (float)M_PI * i / (m_fftSize - 1)));
+    }
 }
 
 FFTProcessor::~FFTProcessor()
 {
     if (m_cfg)
+    {
         kiss_fftr_free(m_cfg);
+    }
 }
 
 // window samples, run FFT, compute magnitudes
 void FFTProcessor::process(const float *samples, uint32_t count)
 {
     if ((int)count < m_fftSize)
+    {
         return;
+    }
 
     // Hann window
     for (int i = 0; i < m_fftSize; i++)
+    {
         m_windowed[i] = samples[i] * m_window[i];
+    }
 
     kiss_fftr(m_cfg, m_windowed.data(), m_output.data());
 

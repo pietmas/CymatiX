@@ -19,7 +19,9 @@ void ui::InputSelector::draw()
     {
         // File is always selectable
         if (ImGui::Selectable("File", m_app.audioSource == AudioSource::File))
+        {
             m_app.audioSource = AudioSource::File;
+        }
 
         // mic and loopback not implemented yet, grayed out
         ImGui::BeginDisabled(true);

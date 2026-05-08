@@ -101,7 +101,9 @@ WaveInterferenceStyle::WaveInterferenceStyle(
 {
     // initalize drop pool with old hit times so they're invisible at startup
     for (int i = 0; i < NUM_DROPS; i++)
+    {
         m_drops[i] = {0.0f, 0.0f, -1000.0f, DROP_SIGMA};
+    }
 
     createDescriptorSetLayout();
     createDescriptorPool();

@@ -3,10 +3,14 @@ IndentWidth: 4
 UseTab: Never
 
 BreakBeforeBraces: Allman
-AllowShortIfStatementsOnASingleLine: false
-AllowShortBlocksOnASingleLine: false
-AllowShortFunctionsOnASingleLine: Empty
 
+# Braces required on all control-flow bodies (clang-format 15+)
+InsertBraces: true
+
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortLoopsOnASingleLine: false
 
 # Force one argument per line
 BinPackArguments: false
@@ -14,12 +18,15 @@ BinPackParameters: false
 AllowAllArgumentsOnNextLine: false
 AllowAllParametersOfDeclarationOnNextLine: false
 
-
 # Avoid weird horizontal alignment
 AlignAfterOpenBracket: BlockIndent
 ContinuationIndentWidth: 4
 
 # Put the opening '(' on the next line when breaking
 PenaltyBreakBeforeFirstCallParameter: 0
+
+PointerAlignment: Right
+NamespaceIndentation: None
+SortIncludes: Never
 
 ColumnLimit: 100

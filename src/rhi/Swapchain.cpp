@@ -167,7 +167,9 @@ vk::PresentModeKHR Swapchain::chooseSwapPresentMode(const std::vector<vk::Presen
 vk::Extent2D Swapchain::chooseSwapExtent(const vk::SurfaceCapabilitiesKHR &capabilities) const
 {
     if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+    {
         return capabilities.currentExtent;
+    }
 
     int width, height;
     glfwGetFramebufferSize(m_window, &width, &height);

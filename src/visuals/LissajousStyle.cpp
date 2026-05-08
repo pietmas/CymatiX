@@ -392,19 +392,25 @@ void LissajousStyle::update(const float *magnitudes, uint32_t count, float delta
     // bass: bins 1..10
     float bass = 0.0f;
     for (uint32_t i = 1; i <= 10 && i < count; i++)
+    {
         bass += magnitudes[i];
+    }
     bass /= 10.0f;
 
     // mid: bins 11..79
     float mid = 0.0f;
     for (uint32_t i = 11; i <= 79 && i < count; i++)
+    {
         mid += magnitudes[i];
+    }
     mid /= 69.0f;
 
     // treble: bins 80..200
     float treble = 0.0f;
     for (uint32_t i = 80; i <= 200 && i < count; i++)
+    {
         treble += magnitudes[i];
+    }
     treble /= 121.0f;
 
     // normalize to 0..1
