@@ -101,6 +101,7 @@ add_executable(cymatics
     src/audio/FFTProcessor.cpp
     src/visuals/LissajousStyle.cpp
     src/visuals/WaveInterferenceStyle.cpp
+    src/visuals/ChladniStyle.cpp
     src/visuals/VisualStyleRegistry.cpp
     src/palette/BioluminescentPalette.cpp
     src/palette/CyberpunkPalette.cpp

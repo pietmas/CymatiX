@@ -2,6 +2,7 @@
 #include <app/Config.h>
 #include <palette/BioluminescentPalette.h>
 #include <palette/CyberpunkPalette.h>
+#include <visuals/ChladniStyle.h>
 #include <visuals/LissajousStyle.h>
 #include <visuals/WaveInterferenceStyle.h>
 
@@ -44,9 +45,6 @@ void App::initVulkan()
     m_sync = std::make_unique<rhi::Sync>();
     m_sync->init(*m_context, m_swapchain->getImageCount());
 
-    m_uiLayer = std::make_unique<ui::UILayer>();
-    m_uiLayer->init(*m_context, *m_swapchain, m_window, *this);
-
     // register palettes before styles so m_activePalette is ready
     m_paletteRegistry.registerPalette(
         "bioluminescent",
@@ -70,12 +68,19 @@ void App::initVulkan()
         [deps = makeDeps()](const palette::IPalette &p)
         { return std::make_unique<visuals::WaveInterferenceStyle>(deps, p); }
     );
+    m_styleRegistry.registerStyle(
+        "chladni",
+        [deps = makeDeps()](const palette::IPalette &p)
+        { return std::make_unique<visuals::ChladniStyle>(deps, p); }
+    );
 
-    m_activeStyle = m_styleRegistry.create("lissajous", *m_activePalette);
-    m_activeStyleName = "lissajous";
+    m_activeStyle = m_styleRegistry.create("chladni", *m_activePalette);
+    m_activeStyleName = "chladni";
 
-    // setActiveStyle("lissajous");   // panel drives this now
-    // setActivePalette("cyberpunk"); //panel drives this now
+    // UILayer init must come after registries are populated so ControlPanel
+    // can read the correct active style/palette names for its combo boxes
+    m_uiLayer = std::make_unique<ui::UILayer>();
+    m_uiLayer->init(*m_context, *m_swapchain, m_window, *this);
 }
 
 // poll events, draw until window closes
@@ -99,7 +104,7 @@ void App::initAudio()
     m_fftProcessor = std::make_unique<audio::FFTProcessor>(2048);
 
     // place audio file next to executable; WAV, MP3, FLAC, OGG all work
-    if (m_audioEngine->load("test/test3.mp3"))
+    if (m_audioEngine->load("test/test5.flac"))
     {
         m_audioEngine->play();
     }

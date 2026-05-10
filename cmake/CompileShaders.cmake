@@ -16,6 +16,8 @@ set(SHADERS
     ${SHADER_SRC_DIR}/lissajous.frag
     ${SHADER_SRC_DIR}/wave_interference.vert
     ${SHADER_SRC_DIR}/wave_interference.frag
+    ${SHADER_SRC_DIR}/chladni.vert
+    ${SHADER_SRC_DIR}/chladni.frag
 )
 
 set(SHADER_SPV_FILES)
