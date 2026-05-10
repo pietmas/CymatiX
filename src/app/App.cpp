@@ -104,7 +104,7 @@ void App::initAudio()
     m_fftProcessor = std::make_unique<audio::FFTProcessor>(2048);
 
     // place audio file next to executable; WAV, MP3, FLAC, OGG all work
-    if (m_audioEngine->load("test/test5.flac"))
+    if (m_audioEngine->load("test/test2.wav"))
     {
         m_audioEngine->play();
     }
