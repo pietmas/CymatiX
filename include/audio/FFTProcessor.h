@@ -4,6 +4,7 @@
 #include <span>
 #include <vector>
 
+#include <app/Config.h>
 #include <kiss_fftr.h>
 
 namespace audio
@@ -12,7 +13,7 @@ namespace audio
 class FFTProcessor
 {
   public:
-    explicit FFTProcessor(int fftSize = 2048);
+    explicit FFTProcessor(int fftSize = Config::FFT_SIZE);
     ~FFTProcessor();
 
     FFTProcessor(const FFTProcessor &) = delete;

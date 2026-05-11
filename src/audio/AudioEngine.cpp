@@ -2,6 +2,7 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include <miniaudio.h>
 
+#include <app/Config.h>
 #include <audio/AudioEngine.h>
 
 #include <cstdio>
@@ -22,7 +23,7 @@ struct AudioEngineImpl
     bool rbInitialized = false;
     bool playing = false;
 
-    uint32_t sampleRate = 44100;
+    uint32_t sampleRate = Config::SAMPLE_RATE;
 
     // ring buffer holds 8192 mono float32 samples
     static constexpr uint32_t RING_BUFFER_FRAMES = 8192;
@@ -224,7 +225,7 @@ bool AudioEngine::isPlaying() const
 }
 uint32_t AudioEngine::getSampleRate() const
 {
-    return m_impl ? m_impl->sampleRate : 44100;
+    return m_impl ? m_impl->sampleRate : Config::SAMPLE_RATE;
 }
 
 } // namespace audio

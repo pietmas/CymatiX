@@ -101,7 +101,7 @@ void App::mainLoop()
 void App::initAudio()
 {
     m_audioEngine = std::make_unique<audio::AudioEngine>();
-    m_fftProcessor = std::make_unique<audio::FFTProcessor>(2048);
+    m_fftProcessor = std::make_unique<audio::FFTProcessor>(Config::FFT_SIZE);
 
     // place audio file next to executable; WAV, MP3, FLAC, OGG all work
     if (m_audioEngine->load("test/test2.wav"))

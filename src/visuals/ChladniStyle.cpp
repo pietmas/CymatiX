@@ -1,5 +1,7 @@
 #include <visuals/ChladniStyle.h>
 
+#include <app/Config.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -394,8 +396,8 @@ void ChladniStyle::update(const float *magnitudes, uint32_t count, float deltaTi
     float highCentroid =
         (highTotalMag > 0.0f) ? (highWeightSum / highTotalMag) / float(highBandWidth - 1) : 0.0f;
 
-    m_targetM = 1.0f + lowCentroid * 25.0f;
-    m_targetN = 1.0f + highCentroid * 10.0f;
+    m_targetM = 1.0f + lowCentroid * 21.0f;
+    m_targetN = 1.0f + highCentroid * 7.0f;
 
     // spectral flux: sum of positive magnitude changes since last frame
     if (m_prevMagnitudes.size() != count)
