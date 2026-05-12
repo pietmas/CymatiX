@@ -10,6 +10,7 @@ layout(push_constant) uniform PC
     float blend;
     float lineWidth;
     float time;
+    float theta;
 }
 pc;
 
@@ -55,8 +56,9 @@ void main()
     float x = fragUV.x;
     float y = fragUV.y;
 
-    // Chladni nodal equation: zero where sand accumulates on a vibrating plate
-    float f = cos(pc.m * PI * x) * cos(pc.n * PI * y) - cos(pc.n * PI * x) * cos(pc.m * PI * y);
+    // Chladni nodal equation: rotated superposition of degenerate eigenmodes
+    float f = cos(pc.theta) * cos(pc.m * PI * x) * cos(pc.n * PI * y) +
+              sin(pc.theta) * cos(pc.n * PI * x) * cos(pc.m * PI * y);
 
     float brightness = 1.0 - smoothstep(0.0, pc.lineWidth, abs(f));
 

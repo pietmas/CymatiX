@@ -396,7 +396,7 @@ void ChladniStyle::update(const float *magnitudes, uint32_t count, float deltaTi
     float highCentroid =
         (highTotalMag > 0.0f) ? (highWeightSum / highTotalMag) / float(highBandWidth - 1) : 0.0f;
 
-    m_targetM = 1.0f + lowCentroid * 21.0f;
+    m_targetM = 1.0f + lowCentroid * 7.0f;
     m_targetN = 1.0f + highCentroid * 7.0f;
 
     // spectral flux: sum of positive magnitude changes since last frame
@@ -473,6 +473,7 @@ void ChladniStyle::render(vk::CommandBuffer cmd, uint32_t frameIndex)
     pc.blend = 0.0f;
     pc.lineWidth = m_lineWidth;
     pc.time = m_time;
+    pc.theta = m_theta;
 
     cmd.pushConstants<PushConstants>(*m_pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, pc);
 
