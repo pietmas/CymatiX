@@ -159,7 +159,7 @@ void ChladniStyle::createDescriptorPool()
     m_descriptorPool = (*m_deps.device).createDescriptorPool(poolInfo);
 }
 
-// Chladni graphics pipeline
+// Chladni graphics pipeline loads chladni.vert.spv / chladni.frag.spv
 void ChladniStyle::createPipeline(vk::Format colorFormat)
 {
     const vk::raii::Device &device = (*m_deps.device);
@@ -370,36 +370,18 @@ void ChladniStyle::update(const float *magnitudes, uint32_t count, float deltaTi
         return;
     }
 
-    // split spectrum into low [0, count/4) and high [count/4, count)
-    uint32_t splitBin = count / 4;
-
-    // energy centroid of low band -> m
-    float lowWeightSum = 0.0f;
-    float lowTotalMag = 0.0f;
-    for (uint32_t i = 0; i < splitBin; i++)
+    // RMS energy for line width
+    float sumSq = 0.0f;
+    for (uint32_t i = 0; i < count; i++)
     {
-        lowWeightSum += float(i) * magnitudes[i];
-        lowTotalMag += magnitudes[i];
+        sumSq += magnitudes[i] * magnitudes[i];
     }
-    float lowCentroid =
-        (lowTotalMag > 0.0f) ? (lowWeightSum / lowTotalMag) / float(splitBin - 1) : 0.0f;
+    float rms = std::sqrt(sumSq / float(count));
 
-    // energy centroid of high band -> n
-    float highWeightSum = 0.0f;
-    float highTotalMag = 0.0f;
-    for (uint32_t i = splitBin; i < count; i++)
-    {
-        highWeightSum += float(i - splitBin) * magnitudes[i];
-        highTotalMag += magnitudes[i];
-    }
-    uint32_t highBandWidth = count - splitBin;
-    float highCentroid =
-        (highTotalMag > 0.0f) ? (highWeightSum / highTotalMag) / float(highBandWidth - 1) : 0.0f;
+    // rolling peak RMS, 5s half-life; auto-gain keeps line width visible at any loudness level
+    m_peakRMS = std::max(rms, m_peakRMS * std::pow(0.5f, deltaTime / 5.0f));
 
-    m_targetM = 1.0f + lowCentroid * 7.0f;
-    m_targetN = 1.0f + highCentroid * 7.0f;
-
-    // spectral flux: sum of positive magnitude changes since last frame
+    // spectral flux for rate-limiting mode transitions
     if (m_prevMagnitudes.size() != count)
     {
         m_prevMagnitudes.assign(count, 0.0f);
@@ -417,29 +399,75 @@ void ChladniStyle::update(const float *magnitudes, uint32_t count, float deltaTi
 
     // rolling peak flux, 2s half-life; normalized flux is transient intensity in [0,1]
     m_peakFlux = std::max(flux, m_peakFlux * std::pow(0.5f, deltaTime / 2.0f));
-    float normalizedFlux = (m_peakFlux > 1e-6f) ? std::clamp(flux / m_peakFlux, 0.0f, 1.0f) : 0.0f;
+    float normFlux = (m_peakFlux > 1e-6f) ? std::clamp(flux / m_peakFlux, 0.0f, 1.0f) : 0.0f;
+
+    // split spectrum into three equal bands: low -> m, mid -> n, high -> theta
+    uint32_t band = count / 3;
+
+    // energy centroid of low band -> m
+    float lowWeightSum = 0.0f;
+    float lowTotalMag = 0.0f;
+    for (uint32_t i = 0; i < band; i++)
+    {
+        lowWeightSum += float(i) * magnitudes[i];
+        lowTotalMag += magnitudes[i];
+    }
+    float lowCentroid =
+        (lowTotalMag > 0.0f) ? (lowWeightSum / lowTotalMag) / float(band - 1) : 0.0f;
+
+    // energy centroid of mid band -> n
+    float midWeightSum = 0.0f;
+    float midTotalMag = 0.0f;
+    for (uint32_t i = band; i < 2 * band; i++)
+    {
+        midWeightSum += float(i - band) * magnitudes[i];
+        midTotalMag += magnitudes[i];
+    }
+    float midCentroid =
+        (midTotalMag > 0.0f) ? (midWeightSum / midTotalMag) / float(band - 1) : 0.0f;
+
+    // energy centroid of high band -> theta
+    float highWeightSum = 0.0f;
+    float highTotalMag = 0.0f;
+    for (uint32_t i = 2 * band; i < count; i++)
+    {
+        highWeightSum += float(i - 2 * band) * magnitudes[i];
+        highTotalMag += magnitudes[i];
+    }
+    uint32_t highBandWidth = count - 2 * band;
+    float highCentroid =
+        (highTotalMag > 0.0f) ? (highWeightSum / highTotalMag) / float(highBandWidth - 1) : 0.0f;
+
+    // map centroids [0,1] to valid beam mode range [2, 15]
+    m_targetM = 2.0f + lowCentroid * 13.0f;
+    m_targetN = 2.0f + midCentroid * 13.0f;
+    m_targetM = std::clamp(m_targetM, 2.0f, 15.0f);
+    m_targetN = std::clamp(m_targetN, 2.0f, 15.0f);
+
+    // map high centroid [0,1] to theta [0, 2pi]
+    m_targetTheta = highCentroid * 6.2831853f;
 
     // rate limit: 0.5/sec during sustained pads, up to 4.0/sec on drum hits
-    float rateLimit = glm::mix(0.5f, 4.0f, normalizedFlux);
-    float deltaM =
-        std::clamp(m_targetM - m_currentM, -rateLimit * deltaTime, rateLimit * deltaTime);
-    m_currentM += deltaM;
-    float deltaN =
-        std::clamp(m_targetN - m_currentN, -rateLimit * deltaTime, rateLimit * deltaTime);
-    m_currentN += deltaN;
+    float rateLimit = glm::mix(0.5f, 4.0f, normFlux);
+    m_currentM += std::clamp(m_targetM - m_currentM, -rateLimit * deltaTime, rateLimit * deltaTime);
+    m_currentN += std::clamp(m_targetN - m_currentN, -rateLimit * deltaTime, rateLimit * deltaTime);
 
-    // RMS energy for line width
-    float sumSq = 0.0f;
-    for (uint32_t i = 0; i < count; i++)
+    // rate-limit theta with shortest-arc wrap so it doesn't spin the long way around
+    float thetaRate = glm::mix(0.3f, 2.0f, normFlux);
+    float thetaDiff = m_targetTheta - m_theta;
+    thetaDiff -= 6.2831853f * std::round(thetaDiff / 6.2831853f);
+    m_theta += std::clamp(thetaDiff, -thetaRate * deltaTime, thetaRate * deltaTime);
+    if (m_theta < 0.0f)
     {
-        sumSq += magnitudes[i] * magnitudes[i];
+        m_theta += 6.2831853f;
     }
-    float rms = std::sqrt(sumSq / float(count));
+    if (m_theta >= 6.2831853f)
+    {
+        m_theta -= 6.2831853f;
+    }
 
-    // rolling peak RMS, 5s half-life; auto-gain keeps line width visible at any loudness level
-    m_peakRMS = std::max(rms, m_peakRMS * std::pow(0.5f, deltaTime / 5.0f));
     float normalizedRMS = (m_peakRMS > 1e-6f) ? std::clamp(rms / m_peakRMS, 0.0f, 1.0f) : 0.0f;
-    m_lineWidth = glm::mix(0.03f, 0.12f, normalizedRMS);
+    m_lineWidth = glm::mix(0.015f, 0.06f, normalizedRMS);
 
     // cache spectrum for render()
     uint32_t bins = std::min(count, static_cast<uint32_t>(MAX_SPECTRUM_BINS));
@@ -465,15 +493,10 @@ void ChladniStyle::render(vk::CommandBuffer cmd, uint32_t frameIndex)
     PushConstants pc{};
     pc.m = m_currentM;
     pc.n = m_currentN;
-    // cos(m*PI*x)*cos(n*PI*y) - cos(n*PI*x)*cos(m*PI*y) = 0 everywhere when m==n -> white screen
-    if (std::abs(pc.m - pc.n) < 0.1f)
-    {
-        pc.n = pc.m + 0.1f;
-    }
-    pc.blend = 0.0f;
+    pc.theta = m_theta;
     pc.lineWidth = m_lineWidth;
     pc.time = m_time;
-    pc.theta = m_theta;
+    pc.signal = 0.0f;
 
     cmd.pushConstants<PushConstants>(*m_pipelineLayout, vk::ShaderStageFlagBits::eFragment, 0, pc);
 

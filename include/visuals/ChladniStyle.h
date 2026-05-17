@@ -32,10 +32,10 @@ class ChladniStyle : public IVisualStyle
     {
         float m;
         float n;
-        float blend;
+        float theta;
         float lineWidth;
         float time;
-        float theta;
+        float signal;
         float pad[2]; // to 32 bytes
     };
 
@@ -70,9 +70,10 @@ class ChladniStyle : public IVisualStyle
     float m_currentN = 5.0f;
     float m_targetM = 3.0f;
     float m_targetN = 5.0f;
-    float m_lineWidth = 0.05f;
+    float m_lineWidth = 0.04f;
     float m_time = 0.0f;
-    float m_theta = 1.047198f; // PI/3
+    float m_theta = 0.0f;
+    float m_targetTheta = 0.0f;
 
     // auto-rate: spectral flux tracking
     std::vector<float> m_prevMagnitudes;
