@@ -112,13 +112,6 @@ add_executable(cymatics
 )
 
 
-set_target_properties(cymatics PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY    ${CMAKE_SOURCE_DIR}
-    RUNTIME_OUTPUT_DIRECTORY_DEBUG  ${CMAKE_SOURCE_DIR}
-    RUNTIME_OUTPUT_DIRECTORY_RELEASE    ${CMAKE_SOURCE_DIR}
-    RUNTIME_OUTPUT_DIRECTORY_RELWITHDEBINFO ${CMAKE_SOURCE_DIR}
-    RUNTIME_OUTPUT_DIRECTORY_MINSIZEREL ${CMAKE_SOURCE_DIR}
-)
 
 target_include_directories(cymatics PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -143,6 +136,7 @@ endif()
 # 
 target_compile_definitions(cymatics PRIVATE
     "SHADER_DIR=\"${CMAKE_SOURCE_DIR}/shaders/compiled\""
+    "ASSET_DIR=\"${CMAKE_SOURCE_DIR}\""
     VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 )
 

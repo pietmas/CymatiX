@@ -1,8 +1,10 @@
 #pragma once
 
+#include <app/SharedTypes.h>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace audio
 {
@@ -31,6 +33,11 @@ class AudioEngine
 
     bool isPlaying() const;
     uint32_t getSampleRate() const;
+
+    void enumerateCaptureDevices();
+    std::vector<std::string> getCaptureDeviceNames() const;
+    bool isLoopbackAvailable() const;
+    bool switchSource(AudioSource src, int deviceIndex = 0);
 
   private:
     std::unique_ptr<AudioEngineImpl> m_impl;

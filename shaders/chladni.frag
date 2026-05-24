@@ -36,9 +36,9 @@ const float BETA[4] = float[](
 
 // sigma=(cosh(b)-cos(b))/(sinh(b)-sin(b)); converges to 1.0 by k=5 in float32
 const float SIGMA[3] = float[](
-    0.98250222,  // k=2
-    1.00077731,  // k=3
-    0.99999645   // k=4
+    0.98250222, // k=2
+    1.00077731, // k=3
+    0.99999645  // k=4
 );
 
 vec4 samplePalette(float t)
@@ -60,7 +60,8 @@ vec4 samplePalette(float t)
     return mix(palette.colors[lo], palette.colors[hi], frac);
 }
 
-// stable form of cosh(bx)-s*sinh(bx): rewrite as ((1-s)*exp(bx)+(1+s)*exp(-bx))/2 to avoid catastrophic cancellation at high modes
+// stable form of cosh(bx)-s*sinh(bx): rewrite as ((1-s)*exp(bx)+(1+s)*exp(-bx))/2 to avoid
+// catastrophic cancellation at high modes
 float beamMode(int k, float xi)
 {
     int idx = clamp(k - 2, 0, 13);
@@ -78,7 +79,8 @@ float beamModeNorm(int k, float xi)
     return beamMode(k, xi) * 0.5;
 }
 
-// linearly interpolate between floor(k) and ceil(k) to avoid sudden nodal-line jumps on mode transitions
+// linearly interpolate between floor(k) and ceil(k) to avoid sudden nodal-line jumps on mode
+// transitions
 float evalMode(float k_cont, float xi)
 {
     float kf = clamp(k_cont, 2.0, 15.0);
@@ -90,7 +92,8 @@ float evalMode(float k_cont, float xi)
 
 void main()
 {
-    // abs(fragUV) folds both halves to xi in [0,1] with xi=0 at screen center, giving 4-fold symmetry
+    // abs(fragUV) folds both halves to xi in [0,1] with xi=0 at screen center, giving 4-fold
+    // symmetry
     float xi_x = abs(fragUV.x);
     float xi_y = abs(fragUV.y);
 
@@ -102,7 +105,13 @@ void main()
     // degenerate superposition: tensor product with angle theta blending (m,n) and (n,m)
     float u = cos(pc.theta) * phiMx * phiNy + sin(pc.theta) * phiNx * phiMy;
 
-    float brightness = 1.0 - smoothstep(0.0, pc.lineWidth, abs(u));
+    // soft gradient correction: reduce line width in flat regions (borders) where
+    // u changes slowly and the same threshold spans more screen pixels.
+    // refGrad is the typical center gradient (u/pixel); clamp keeps center lines
+    float gradLen = length(vec2(dFdx(u), dFdy(u)));
+    float gradNorm = clamp(gradLen / 0.008, 0.4, 1.0);
+    float adjWidth = pc.lineWidth * gradNorm;
+    float brightness = 1.0 - smoothstep(0.0, adjWidth, abs(u));
 
     outColor = vec4(samplePalette(brightness).rgb, 1.0);
 }

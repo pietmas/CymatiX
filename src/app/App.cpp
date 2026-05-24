@@ -9,8 +9,11 @@
 #include <GLFW/glfw3.h>
 
 #include <algorithm>
+#include <signal.h>
 #include <cstdio>
 #include <cstdlib>
+
+extern volatile sig_atomic_t g_quit;
 
 // open window, register resize callback
 void App::initWindow()
@@ -83,10 +86,10 @@ void App::initVulkan()
     m_uiLayer->init(*m_context, *m_swapchain, m_window, *this);
 }
 
-// poll events, draw until window closes
+// poll events, draw until window closes or signal recieved
 void App::mainLoop()
 {
-    while (!glfwWindowShouldClose(m_window))
+    while (!glfwWindowShouldClose(m_window) && !g_quit)
     {
         glfwPollEvents();
         m_uiLayer->buildFrame();
@@ -104,14 +107,16 @@ void App::initAudio()
     m_fftProcessor = std::make_unique<audio::FFTProcessor>(Config::FFT_SIZE);
 
     // place audio file next to executable; WAV, MP3, FLAC, OGG all work
-    if (m_audioEngine->load("test/test2.wav"))
+    if (m_audioEngine->load(ASSET_DIR "/test/test2.wav"))
     {
         m_audioEngine->play();
     }
     else
     {
-        printf("[App] tip: place test/test2.wav next to the executable\n");
+        printf("[App] tip: place test/test2.wav in %s/test/\n", ASSET_DIR);
     }
+
+    m_audioEngine->enumerateCaptureDevices();
 }
 
 // drain ring buffer, slide window, run FFT each frame
@@ -474,6 +479,29 @@ std::string App::getActiveStyleName() const
 std::string App::getActivePaletteName() const
 {
     return m_activePaletteName;
+}
+
+// delegate to AudioEngine, update audioSource on success
+bool App::switchAudioSource(AudioSource src, int deviceIndex)
+{
+    bool ok = m_audioEngine->switchSource(src, deviceIndex);
+    if (ok)
+    {
+        audioSource = src;
+    }
+    return ok;
+}
+
+// return capture device names from AudioEngine
+std::vector<std::string> App::getCaptureDeviceNames() const
+{
+    return m_audioEngine->getCaptureDeviceNames();
+}
+
+// return whether loopback was probed successfully at startup
+bool App::isLoopbackAvailable() const
+{
+    return m_audioEngine->isLoopbackAvailable();
 }
 
 // GLFW resize callback

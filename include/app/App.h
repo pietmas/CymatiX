@@ -44,6 +44,10 @@ class App
     float audioGain = 1.0f;
     AudioSource audioSource = AudioSource::File;
 
+    bool switchAudioSource(AudioSource src, int deviceIndex = 0);
+    std::vector<std::string> getCaptureDeviceNames() const;
+    bool isLoopbackAvailable() const;
+
   private:
     void initWindow();
     void initVulkan();
