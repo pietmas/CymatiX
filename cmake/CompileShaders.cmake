@@ -18,6 +18,10 @@ set(SHADERS
     ${SHADER_SRC_DIR}/wave_interference.frag
     ${SHADER_SRC_DIR}/chladni.vert
     ${SHADER_SRC_DIR}/chladni.frag
+    ${SHADER_SRC_DIR}/ripple.vert
+    ${SHADER_SRC_DIR}/ripple.frag
+    ${SHADER_SRC_DIR}/particle.vert
+    ${SHADER_SRC_DIR}/particle.frag
 )
 
 set(SHADER_SPV_FILES)

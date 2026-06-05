@@ -4,6 +4,8 @@
 #include <palette/CyberpunkPalette.h>
 #include <visuals/ChladniStyle.h>
 #include <visuals/LissajousStyle.h>
+#include <visuals/ParticleStyle.h>
+#include <visuals/RippleStyle.h>
 #include <visuals/WaveInterferenceStyle.h>
 
 #include <GLFW/glfw3.h>
@@ -76,6 +78,16 @@ void App::initVulkan()
         [deps = makeDeps()](const palette::IPalette &p)
         { return std::make_unique<visuals::ChladniStyle>(deps, p); }
     );
+    m_styleRegistry.registerStyle(
+        "ripple",
+        [deps = makeDeps()](const palette::IPalette &p)
+        { return std::make_unique<visuals::RippleStyle>(deps, p); }
+    );
+    m_styleRegistry.registerStyle(
+        "particles",
+        [deps = makeDeps()](const palette::IPalette &p)
+        { return std::make_unique<visuals::ParticleStyle>(deps, p); }
+    );
 
     m_activeStyle = m_styleRegistry.create("chladni", *m_activePalette);
     m_activeStyleName = "chladni";
@@ -107,7 +119,7 @@ void App::initAudio()
     m_fftProcessor = std::make_unique<audio::FFTProcessor>(Config::FFT_SIZE);
 
     // place audio file next to executable; WAV, MP3, FLAC, OGG all work
-    if (m_audioEngine->load(ASSET_DIR "/test/test2.wav"))
+    if (m_audioEngine->load(ASSET_DIR "/test/test4.flac"))
     {
         m_audioEngine->play();
     }

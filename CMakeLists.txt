@@ -102,6 +102,9 @@ add_executable(cymatics
     src/visuals/LissajousStyle.cpp
     src/visuals/WaveInterferenceStyle.cpp
     src/visuals/ChladniStyle.cpp
+    src/visuals/OnsetDetector.cpp
+    src/visuals/RippleStyle.cpp
+    src/visuals/ParticleStyle.cpp
     src/visuals/VisualStyleRegistry.cpp
     src/palette/BioluminescentPalette.cpp
     src/palette/CyberpunkPalette.cpp
