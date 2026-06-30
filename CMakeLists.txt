@@ -97,6 +97,7 @@ add_executable(cymatics
     src/rhi/Pipeline.cpp
     src/rhi/CommandPool.cpp
     src/rhi/Sync.cpp
+    src/rhi/BufferUtils.cpp
     src/audio/AudioEngine.cpp
     src/audio/FFTProcessor.cpp
     src/visuals/LissajousStyle.cpp

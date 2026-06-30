@@ -271,7 +271,9 @@ QueueFamilyIndices VulkanContext::findQueueFamilies(vk::PhysicalDevice device) c
 
     for (uint32_t i = 0; i < (uint32_t)queueFamilies.size(); i++)
     {
-        if (queueFamilies[i].queueFlags & vk::QueueFlagBits::eGraphics)
+        // graphics family is guaranteed to support compute per spec;
+        if ((queueFamilies[i].queueFlags & vk::QueueFlagBits::eGraphics) &&
+            (queueFamilies[i].queueFlags & vk::QueueFlagBits::eCompute))
         {
             indices.graphicsFamily = i;
         }

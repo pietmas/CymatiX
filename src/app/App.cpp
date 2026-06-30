@@ -119,7 +119,7 @@ void App::initAudio()
     m_fftProcessor = std::make_unique<audio::FFTProcessor>(Config::FFT_SIZE);
 
     // place audio file next to executable; WAV, MP3, FLAC, OGG all work
-    if (m_audioEngine->load(ASSET_DIR "/test/test4.flac"))
+    if (m_audioEngine->load(ASSET_DIR "/test/test2.wav"))
     {
         m_audioEngine->play();
     }
@@ -296,6 +296,10 @@ void App::drawFrame()
     dep.pImageMemoryBarriers = &toColor;
     cmd.pipelineBarrier2(dep);
 
+    // run any compute sim before rendering (no-op for non-compute styles).
+    // dispatch is illegal inside a dynamic rendering block, so it goes here
+    m_activeStyle->computeDispatch(cmd, (uint32_t)m_currentFrame);
+
     // begin dynamic rendering
     vk::ClearValue clearColor{};
     clearColor.color = vk::ClearColorValue{std::array<float, 4>{0.0f, 0.0f, 0.0f, 1.0f}};
@@ -410,6 +414,8 @@ rhi::VulkanDeps App::makeDeps() const
     deps.physicalDevice = m_context->getPhysicalDevice();
     deps.colorFormat = m_swapchain->getImageFormat();
     deps.extent = m_swapchain->getExtent();
+    deps.transientCmdPool = m_commandPool->getPool();
+    deps.graphicsQueue = m_context->getGraphicsQueue();
     return deps;
 }
 

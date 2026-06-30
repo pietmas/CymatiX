@@ -1,6 +1,7 @@
 #include <visuals/ParticleStyle.h>
 
 #include <app/Config.h>
+#include <rhi/BufferUtils.h>
 
 #include <algorithm>
 #include <cmath>
@@ -10,18 +11,14 @@
 #include <fstream>
 #include <vector>
 
-#include <glm/glm.hpp>
-
 namespace visuals
 {
 
-// same four spawn positions as RippleStyle so bursts line up visually
-const glm::vec2 ParticleStyle::BAND_POS[4] = {
-    {0.0f, 0.0f},
-    {0.3f, 0.2f},
-    {-0.4f, 0.5f},
-    {0.7f, -0.6f},
-};
+// random float in -1..1, used to scatter the initial particle seed
+static float randUV()
+{
+    return (float)(rand() % 2000) / 1000.0f - 1.0f;
+}
 
 // file / shader helpers (same pattern as RippleStyle)
 
@@ -112,15 +109,15 @@ ParticleStyle::ParticleStyle(const rhi::VulkanDeps &deps, const palette::IPalett
         printf("[ParticleStyle] largePoints feature unsupported, particles will be 1px dots\n");
     }
 
-    // pre-size simulation array; never realloc at runtime
-    m_particles.resize(MAX_PARTICLES);
-
     createDescriptorSetLayout();
     createDescriptorPool();
     createPipeline(m_deps.colorFormat);
     createPaletteBuffers();
     createParticleBuffer();
     createDescriptorSets(palette);
+    createSpectrumBuffers();
+    createComputeDescriptors();
+    createComputePipeline();
 }
 
 // unmap memory before raii frees it
@@ -129,12 +126,9 @@ ParticleStyle::~ParticleStyle()
     for (int i = 0; i < Config::MAX_FRAMES_IN_FLIGHT; i++)
     {
         m_paletteUBOMemory[i].unmapMemory();
+        m_spectrumMemory[i].unmapMemory();
     }
-    if (m_particleMapped != nullptr)
-    {
-        m_particleMemory.unmapMemory();
-        m_particleMapped = nullptr;
-    }
+    // particle buffer is DEVICE_LOCAL (never mapped), nothing to unmap
 }
 
 // private init helpers
@@ -200,8 +194,8 @@ void ParticleStyle::createPipeline(vk::Format colorFormat)
     bindingDesc.stride = sizeof(ParticleVertex);
     bindingDesc.inputRate = vk::VertexInputRate::eVertex;
 
-    // four attributes: pos (vec2), vel (vec2), age (float), energy (float)
-    vk::VertexInputAttributeDescription attrs[4]{};
+    // five attributes: pos, vel, age, energy, freq. pad at offset 28 has no attribute
+    vk::VertexInputAttributeDescription attrs[5]{};
     attrs[0].location = 0;
     attrs[0].binding = 0;
     attrs[0].format = vk::Format::eR32G32Sfloat;
@@ -222,10 +216,15 @@ void ParticleStyle::createPipeline(vk::Format colorFormat)
     attrs[3].format = vk::Format::eR32Sfloat;
     attrs[3].offset = 20;
 
+    attrs[4].location = 4;
+    attrs[4].binding = 0;
+    attrs[4].format = vk::Format::eR32Sfloat;
+    attrs[4].offset = 24;
+
     vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
     vertexInputInfo.vertexBindingDescriptionCount = 1;
     vertexInputInfo.pVertexBindingDescriptions = &bindingDesc;
-    vertexInputInfo.vertexAttributeDescriptionCount = 4;
+    vertexInputInfo.vertexAttributeDescriptionCount = 5;
     vertexInputInfo.pVertexAttributeDescriptions = attrs;
 
     // POINT_LIST means each vertex becomes a point sprite
@@ -338,22 +337,44 @@ void ParticleStyle::createPaletteBuffers()
     }
 }
 
-// HOST_VISIBLE vertex buffer for MAX_PARTICLES, permanently mapped, written under in-flight fence
+// DEVICE_LOCAL particle buffer, seeded once via a staging upload (GPU owns it after)
 void ParticleStyle::createParticleBuffer()
 {
-    const vk::raii::Device &device = (*m_deps.device);
-    vk::PhysicalDevice physDev = m_deps.physicalDevice;
+    // build the initial cloud on the CPU: random positions and ages so it starts populated
+    std::vector<ParticleVertex> seed(MAX_PARTICLES);
+    for (int i = 0; i < MAX_PARTICLES; i++)
+    {
+        seed[i].pos[0] = randUV(); // -1..1
+        seed[i].pos[1] = randUV();
+        seed[i].vel[0] = 0.0f;
+        seed[i].vel[1] = 0.0f;
+        seed[i].age = (float)(rand() % 1000) / 1000.0f;
+        seed[i].energy = 0.0f;
+        seed[i].freq = 0.0f;
+        seed[i].pad = 0.0f;
+    }
 
     vk::DeviceSize bufferSize = (vk::DeviceSize)MAX_PARTICLES * sizeof(ParticleVertex);
 
-    createMappedBuffer(
-        device,
-        physDev,
+    // STORAGE so compute can write it, VERTEX so graphics can fetch it, TRANSFER_DST for the copy
+    rhi::AllocatedBuffer buf = rhi::createBuffer(
+        m_deps,
         bufferSize,
-        vk::BufferUsageFlagBits::eVertexBuffer,
-        m_particleBuffer,
-        m_particleMemory,
-        m_particleMapped
+        vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eVertexBuffer |
+            vk::BufferUsageFlagBits::eTransferDst,
+        vk::MemoryPropertyFlagBits::eDeviceLocal
+    );
+    m_particleBuffer = std::move(buf.buffer);
+    m_particleMemory = std::move(buf.memory);
+
+    // copy the seed into the device-local buffer through a transient staging buffer
+    rhi::uploadToDeviceLocal(
+        m_deps,
+        m_deps.transientCmdPool,
+        m_deps.graphicsQueue,
+        *m_particleBuffer,
+        seed.data(),
+        bufferSize
     );
 }
 
@@ -396,28 +417,180 @@ void ParticleStyle::createDescriptorSets(const palette::IPalette &palette)
     }
 }
 
-// per-frame logic
-
-// detect onsets, spawn particles, run CPU simulation
-void ParticleStyle::update(const float *magnitudes, uint32_t count, float deltaTime)
+// per-frame spectrum SSBO, host-visible + mapped, zero-filled so first dispatch reads zeros
+void ParticleStyle::createSpectrumBuffers()
 {
-    if (count > 0)
-    {
-        m_onset.update(magnitudes, count);
-        for (int b = 0; b < 4; b++)
-        {
-            if (m_onset.hasOnset(b))
-            {
-                spawnParticles(b, m_onset.bandEnergy(b));
-            }
-        }
-    }
+    const vk::raii::Device &device = (*m_deps.device);
+    vk::PhysicalDevice physDev = m_deps.physicalDevice;
 
-    simulateParticles(deltaTime);
-    uploadParticles();
+    m_spectrumBuffers.reserve(Config::MAX_FRAMES_IN_FLIGHT);
+    m_spectrumMemory.reserve(Config::MAX_FRAMES_IN_FLIGHT);
+
+    vk::DeviceSize size = (vk::DeviceSize)SPECTRUM_COUNT * sizeof(float);
+
+    for (int i = 0; i < Config::MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        m_spectrumBuffers.emplace_back(nullptr);
+        m_spectrumMemory.emplace_back(nullptr);
+        createMappedBuffer(
+            device,
+            physDev,
+            size,
+            vk::BufferUsageFlagBits::eStorageBuffer,
+            m_spectrumBuffers[i],
+            m_spectrumMemory[i],
+            m_spectrumMapped[i]
+        );
+        // cold start: first compute dispatch may run before update() copies real data
+        memset(m_spectrumMapped[i], 0, size);
+    }
 }
 
-// bind pipeline, push constants, bind vertex buffer, draw m_aliveCount points
+// compute descriptor layout/pool/sets: binding 0 = particle SSBO, binding 1 = spectrum SSBO
+void ParticleStyle::createComputeDescriptors()
+{
+    const vk::raii::Device &device = (*m_deps.device);
+
+    // two storage buffer bindings, both visible to the compute stage
+    vk::DescriptorSetLayoutBinding bindings[2]{};
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = vk::ShaderStageFlagBits::eCompute;
+
+    vk::DescriptorSetLayoutCreateInfo layoutInfo{};
+    layoutInfo.bindingCount = 2;
+    layoutInfo.pBindings = bindings;
+
+    m_computeDSLayout = device.createDescriptorSetLayout(layoutInfo);
+
+    // each frame's set needs 2 storage descriptors (particle + spectrum)
+    vk::DescriptorPoolSize poolSize{};
+    poolSize.type = vk::DescriptorType::eStorageBuffer;
+    poolSize.descriptorCount = Config::MAX_FRAMES_IN_FLIGHT * 2;
+
+    vk::DescriptorPoolCreateInfo poolInfo{};
+    poolInfo.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes = &poolSize;
+    poolInfo.maxSets = Config::MAX_FRAMES_IN_FLIGHT;
+
+    m_computeDescriptorPool = device.createDescriptorPool(poolInfo);
+
+    std::vector<vk::DescriptorSetLayout> layouts(Config::MAX_FRAMES_IN_FLIGHT, *m_computeDSLayout);
+
+    vk::DescriptorSetAllocateInfo allocInfo{};
+    allocInfo.descriptorPool = *m_computeDescriptorPool;
+    allocInfo.descriptorSetCount = Config::MAX_FRAMES_IN_FLIGHT;
+    allocInfo.pSetLayouts = layouts.data();
+
+    m_computeDescriptorSets = device.allocateDescriptorSets(allocInfo);
+
+    for (int i = 0; i < Config::MAX_FRAMES_IN_FLIGHT; i++)
+    {
+        // binding 0: the one shared particle buffer (same handle in every set)
+        vk::DescriptorBufferInfo particleInfo{};
+        particleInfo.buffer = *m_particleBuffer;
+        particleInfo.offset = 0;
+        particleInfo.range = VK_WHOLE_SIZE;
+
+        // binding 1: this frame's own spectrum buffer
+        vk::DescriptorBufferInfo spectrumInfo{};
+        spectrumInfo.buffer = *m_spectrumBuffers[i];
+        spectrumInfo.offset = 0;
+        spectrumInfo.range = VK_WHOLE_SIZE;
+
+        vk::WriteDescriptorSet writes[2]{};
+        writes[0].dstSet = *m_computeDescriptorSets[i];
+        writes[0].dstBinding = 0;
+        writes[0].descriptorCount = 1;
+        writes[0].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[0].pBufferInfo = &particleInfo;
+
+        writes[1].dstSet = *m_computeDescriptorSets[i];
+        writes[1].dstBinding = 1;
+        writes[1].descriptorCount = 1;
+        writes[1].descriptorType = vk::DescriptorType::eStorageBuffer;
+        writes[1].pBufferInfo = &spectrumInfo;
+
+        device.updateDescriptorSets({writes[0], writes[1]}, {});
+    }
+}
+
+// compute pipeline: own layout with the compute DS layout + 16-byte COMPUTE push range
+void ParticleStyle::createComputePipeline()
+{
+    const vk::raii::Device &device = (*m_deps.device);
+
+    auto compCode = readFile(SHADER_DIR "/particle_simulate.comp.spv");
+    vk::raii::ShaderModule compModule = createShaderModule(device, compCode);
+
+    vk::PushConstantRange pcRange{};
+    pcRange.stageFlags = vk::ShaderStageFlagBits::eCompute;
+    pcRange.offset = 0;
+    pcRange.size = sizeof(ComputePush);
+
+    vk::PipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.setLayoutCount = 1;
+    layoutInfo.pSetLayouts = &*m_computeDSLayout;
+    layoutInfo.pushConstantRangeCount = 1;
+    layoutInfo.pPushConstantRanges = &pcRange;
+
+    m_computePipelineLayout = device.createPipelineLayout(layoutInfo);
+
+    vk::PipelineShaderStageCreateInfo stage{};
+    stage.stage = vk::ShaderStageFlagBits::eCompute;
+    stage.module = *compModule;
+    stage.pName = "main";
+
+    vk::ComputePipelineCreateInfo pipelineInfo{};
+    pipelineInfo.stage = stage;
+    pipelineInfo.layout = *m_computePipelineLayout;
+
+    m_computePipeline = device.createComputePipeline(nullptr, pipelineInfo);
+    // compute shader module destroyed at end of scope
+}
+
+// per-frame logic
+
+// per-frame update; stash sim scalars + spectrum for computeDispatch to upload
+void ParticleStyle::update(const float *magnitudes, uint32_t count, float deltaTime)
+{
+    m_lastDt = deltaTime;
+    m_time += deltaTime;
+    m_frameSeed++;
+
+    // copy magnitudes to staging array; computeDispatch pushes to frame SSBO. zero-pad tail
+    uint32_t n = std::min(count, (uint32_t)SPECTRUM_COUNT);
+    memcpy(m_pendingSpectrum, magnitudes, n * sizeof(float));
+    if (n < (uint32_t)SPECTRUM_COUNT)
+    {
+        memset(m_pendingSpectrum + n, 0, (SPECTRUM_COUNT - n) * sizeof(float));
+    }
+
+    // precompute bass + loudness so shader live force dont loop spectrum per particle.
+    // RMS keeps same scale as magnitudes. skip DC bin, bass = first 64 bins, loudness = all
+    float bassSum = 0.0f;
+    float totalSum = 0.0f;
+    for (uint32_t k = 1; k < (uint32_t)SPECTRUM_COUNT; k++)
+    {
+        float e = m_pendingSpectrum[k] * m_pendingSpectrum[k];
+        totalSum += e;
+        if (k < 64)
+        {
+            bassSum += e;
+        }
+    }
+    m_bass = std::sqrt(bassSum / 63.0f);
+    m_loudness = std::sqrt(totalSum / (float)(SPECTRUM_COUNT - 1));
+}
+
+// bind pipeline, push constants, bind vertex buffer, draw all particles
 void ParticleStyle::render(vk::CommandBuffer cmd, uint32_t frameIndex)
 {
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *m_pipeline);
@@ -435,16 +608,12 @@ void ParticleStyle::render(vk::CommandBuffer cmd, uint32_t frameIndex)
 
     cmd.pushConstants<PushConstants>(*m_pipelineLayout, vk::ShaderStageFlagBits::eVertex, 0, pc);
 
-    if (m_aliveCount == 0)
-    {
-        return;
-    }
-
+    // every particle is always alive now (GPU self-respawns), so draw the whole buffer
     vk::Buffer vbuf = *m_particleBuffer;
     vk::DeviceSize offset = 0;
     cmd.bindVertexBuffers(0, {vbuf}, {offset});
 
-    cmd.draw(m_aliveCount, 1, 0, 0);
+    cmd.draw(MAX_PARTICLES, 1, 0, 0);
 }
 
 // store new extent
@@ -453,79 +622,74 @@ void ParticleStyle::onResize(vk::Extent2D newExtent)
     m_extent = newExtent;
 }
 
-// step alive particles by dt, kill expired ones
-void ParticleStyle::simulateParticles(float dt)
+// record pre-barrier, dispatch the compute sim, record post-barrier. App calls this
+// before beginRendering (dispatch is illegal inside a dynamic rendering block)
+void ParticleStyle::computeDispatch(vk::CommandBuffer cmd, uint32_t frameIndex)
 {
-    uint32_t alive = 0;
-    for (uint32_t i = 0; i < m_aliveCount; i++)
-    {
-        Particle p = m_particles[i];
+    // upload this frame's spectrum before the GPU reads it (host-coherent, no flush needed)
+    memcpy(m_spectrumMapped[frameIndex], m_pendingSpectrum, SPECTRUM_COUNT * sizeof(float));
 
-        p.age += dt / 4.0f; // 4-second lifetime
-        if (p.age >= 1.0f)
-        {
-            continue; // dead, dont copy forward
-        }
+    // pre-dispatch: previous frame's vertex read -> this frame's compute write (WAR).
+    // one particle buffer shared across frames-in-flight needs this read->write barrier
+    vk::BufferMemoryBarrier2 pre{};
+    pre.srcStageMask = vk::PipelineStageFlagBits2::eVertexAttributeInput;
+    pre.srcAccessMask = vk::AccessFlagBits2::eVertexAttributeRead;
+    pre.dstStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+    pre.dstAccessMask = vk::AccessFlagBits2::eShaderStorageWrite;
+    pre.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    pre.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    pre.buffer = *m_particleBuffer;
+    pre.offset = 0;
+    pre.size = VK_WHOLE_SIZE;
 
-        // spiral field: gives clockwise curl when combined with radial spawn velocity
-        p.vel += glm::vec2(-p.pos.y, p.pos.x) * 0.4f * dt;
+    vk::DependencyInfo depPre{};
+    depPre.bufferMemoryBarrierCount = 1;
+    depPre.pBufferMemoryBarriers = &pre;
+    cmd.pipelineBarrier2(depPre);
 
-        // drag keeps particles from flying off-screen on high-energy transients
-        p.vel *= (1.0f - 0.5f * dt);
+    // dispatch the simulation
+    cmd.bindPipeline(vk::PipelineBindPoint::eCompute, *m_computePipeline);
+    cmd.bindDescriptorSets(
+        vk::PipelineBindPoint::eCompute,
+        *m_computePipelineLayout,
+        0,
+        {*m_computeDescriptorSets[frameIndex]},
+        {}
+    );
 
-        p.pos += p.vel * dt;
+    ComputePush push{};
+    push.dt = m_lastDt;
+    push.time = m_time;
+    push.frameSeed = m_frameSeed;
+    push.particleCount = (uint32_t)MAX_PARTICLES;
+    push.bass = m_bass;
+    push.loudness = m_loudness;
+    cmd.pushConstants<ComputePush>(
+        *m_computePipelineLayout,
+        vk::ShaderStageFlagBits::eCompute,
+        0,
+        push
+    );
 
-        m_particles[alive++] = p;
-    }
-    m_aliveCount = alive;
-}
+    uint32_t groups = (MAX_PARTICLES + 255) / 256; // ceil(N/256) = 40 groups
+    cmd.dispatch(groups, 1, 1);
 
-// memcpy alive particles into mapped vertex buffer
-void ParticleStyle::uploadParticles()
-{
-    if (m_aliveCount == 0)
-    {
-        return;
-    }
-    // Particle and ParticleVertex have identical layout (6 floats, 24 bytes)
-    size_t bytes = (size_t)m_aliveCount * sizeof(ParticleVertex);
-    memcpy(m_particleMapped, m_particles.data(), bytes);
-}
+    // post-dispatch: compute write -> vertex read (RAW), so the draw sees this frame's sim
+    vk::BufferMemoryBarrier2 post{};
+    post.srcStageMask = vk::PipelineStageFlagBits2::eComputeShader;
+    post.srcAccessMask = vk::AccessFlagBits2::eShaderStorageWrite;
+    post.dstStageMask = vk::PipelineStageFlagBits2::eVertexAttributeInput;
+    post.dstAccessMask = vk::AccessFlagBits2::eVertexAttributeRead;
+    post.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    post.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    post.buffer = *m_particleBuffer;
+    post.offset = 0;
+    post.size = VK_WHOLE_SIZE;
 
-// spawn up to SPAWN_BATCH new particles around the band's fixed UV position
-void ParticleStyle::spawnParticles(int band, float energy)
-{
-    int toSpawn = std::min(SPAWN_BATCH, MAX_PARTICLES - (int)m_aliveCount);
-    for (int i = 0; i < toSpawn; i++)
-    {
-        // random angular offset within radius 0.1 around band position
-        float angle = (float)(rand() % 1000) / 1000.0f * 2.0f * 3.14159f;
-        float radius = (float)(rand() % 100) / 100.0f * 0.1f;
-        glm::vec2 spawnPos = BAND_POS[band] + glm::vec2(cosf(angle), sinf(angle)) * radius;
-
-        // radial outward velocity from origin, scaled by energy and clamped
-        float speed = 0.2f + energy * 10.0f;
-        speed = std::min(speed, 1.5f);
-
-        glm::vec2 dir;
-        if (glm::length(spawnPos) < 1e-4f)
-        {
-            // sub-bass spawns at origin, normalize would be undefined, use random angle
-            dir = glm::vec2(cosf(angle), sinf(angle));
-        }
-        else
-        {
-            dir = glm::normalize(spawnPos);
-        }
-
-        Particle p{};
-        p.pos = spawnPos;
-        p.vel = dir * speed;
-        p.age = 0.0f;
-        p.energy = std::min(energy * 5.0f, 1.0f);
-
-        m_particles[m_aliveCount++] = p;
-    }
+    vk::DependencyInfo depPost{};
+    depPost.bufferMemoryBarrierCount = 1;
+    depPost.pBufferMemoryBarriers = &post;
+    cmd.pipelineBarrier2(depPost);
 }
 
 } // namespace visuals

@@ -22,6 +22,7 @@ set(SHADERS
     ${SHADER_SRC_DIR}/ripple.frag
     ${SHADER_SRC_DIR}/particle.vert
     ${SHADER_SRC_DIR}/particle.frag
+    ${SHADER_SRC_DIR}/particle_simulate.comp
 )
 
 set(SHADER_SPV_FILES)

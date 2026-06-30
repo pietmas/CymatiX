@@ -12,6 +12,8 @@ struct VulkanDeps
     vk::PhysicalDevice physicalDevice;
     vk::Format colorFormat = vk::Format::eUndefined;
     vk::Extent2D extent;
+    vk::CommandPool transientCmdPool = nullptr; // for one-time uploads
+    vk::Queue graphicsQueue = nullptr;          // submit target for uploads
 };
 
 } // namespace rhi
