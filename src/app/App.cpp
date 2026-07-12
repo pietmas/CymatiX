@@ -2,6 +2,8 @@
 #include <app/Config.h>
 #include <palette/BioluminescentPalette.h>
 #include <palette/CyberpunkPalette.h>
+#include <palette/MonochromePalette.h>
+#include <palette/OrganicPalette.h>
 #include <visuals/ChladniStyle.h>
 #include <visuals/LissajousStyle.h>
 #include <visuals/ParticleStyle.h>
@@ -9,6 +11,7 @@
 #include <visuals/WaveInterferenceStyle.h>
 
 #include <GLFW/glfw3.h>
+#include <imgui.h>
 
 #include <algorithm>
 #include <signal.h>
@@ -59,6 +62,14 @@ void App::initVulkan()
         "cyberpunk",
         [] { return std::make_unique<palette::CyberpunkPalette>(); }
     );
+    m_paletteRegistry.registerPalette(
+        "monochrome",
+        [] { return std::make_unique<palette::MonochromePalette>(); }
+    );
+    m_paletteRegistry.registerPalette(
+        "organic",
+        [] { return std::make_unique<palette::OrganicPalette>(); }
+    );
     m_activePalette = m_paletteRegistry.create("bioluminescent");
     m_activePaletteName = "bioluminescent";
 
@@ -105,6 +116,7 @@ void App::mainLoop()
     {
         glfwPollEvents();
         m_uiLayer->buildFrame();
+        pollHotkeys();
         update();
         drawFrame();
     }
@@ -239,6 +251,71 @@ void App::recreateSwapchain()
 {
     m_swapchain->recreate(*m_context);
     m_activeStyle->onResize(m_swapchain->getExtent());
+}
+
+// toggle exclusive fullscreen on primary monitor, save windowed rect so we can go back
+void App::toggleFullscreen()
+{
+    if (!m_isFullscreen)
+    {
+        // grab current placement first, restored when we leave fullscreen
+        glfwGetWindowPos(m_window, &m_windowedX, &m_windowedY);
+        glfwGetWindowSize(m_window, &m_windowedW, &m_windowedH);
+
+        GLFWmonitor *mon = glfwGetPrimaryMonitor();
+        const GLFWvidmode *mode = glfwGetVideoMode(mon);
+        glfwSetWindowMonitor(m_window, mon, 0, 0, mode->width, mode->height, mode->refreshRate);
+        m_isFullscreen = true;
+    }
+    else
+    {
+        // nullptr monitor -> windowed, restore saved pos/size
+        glfwSetWindowMonitor(
+            m_window,
+            nullptr,
+            m_windowedX,
+            m_windowedY,
+            m_windowedW,
+            m_windowedH,
+            0
+        );
+        m_isFullscreen = false;
+    }
+
+    // extent changed, force swapchain recreate on the next drawFrame
+    m_framebufferResized = true;
+}
+
+// flag a screenshot for the next frame
+void App::requestScreenshot()
+{
+    m_screenshotRequested = true;
+}
+
+// poll F11/F12 once per frame with edge detection, skip while imgui has the keyboard
+void App::pollHotkeys()
+{
+    // dont steal keys from a focused imgui text widget
+    if (ImGui::GetIO().WantCaptureKeyboard)
+    {
+        m_prevF11 = false;
+        m_prevF12 = false;
+        return;
+    }
+
+    bool f11 = glfwGetKey(m_window, GLFW_KEY_F11) == GLFW_PRESS;
+    if (f11 && !m_prevF11)
+    {
+        toggleFullscreen();
+    }
+    m_prevF11 = f11;
+
+    bool f12 = glfwGetKey(m_window, GLFW_KEY_F12) == GLFW_PRESS;
+    if (f12 && !m_prevF12)
+    {
+        requestScreenshot();
+    }
+    m_prevF12 = f12;
 }
 
 // record + submit one frame

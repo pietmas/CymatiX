@@ -109,6 +109,8 @@ add_executable(cymatics
     src/visuals/VisualStyleRegistry.cpp
     src/palette/BioluminescentPalette.cpp
     src/palette/CyberpunkPalette.cpp
+    src/palette/MonochromePalette.cpp
+    src/palette/OrganicPalette.cpp
     src/palette/PaletteRegistry.cpp
     src/ui/UILayer.cpp
     src/ui/ControlPanel.cpp

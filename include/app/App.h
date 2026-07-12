@@ -48,6 +48,9 @@ class App
     std::vector<std::string> getCaptureDeviceNames() const;
     bool isLoopbackAvailable() const;
 
+    void toggleFullscreen();
+    void requestScreenshot();
+
   private:
     void initWindow();
     void initVulkan();
@@ -58,6 +61,7 @@ class App
     void drawFrame();
     void update();
     void recreateSwapchain();
+    void pollHotkeys();
     rhi::VulkanDeps makeDeps() const;
 
     static void framebufferResizeCallback(GLFWwindow *window, int width, int height);
@@ -88,6 +92,20 @@ class App
     bool m_framebufferResized = false;
     int m_debugFrameCount = 0;
     float m_lastFrameTime = 0.0f;
+
+    // fullscreen state; windowed rect saved so we can restore on toggle back
+    bool m_isFullscreen = false;
+    int m_windowedX = 0;
+    int m_windowedY = 0;
+    int m_windowedW = 0;
+    int m_windowedH = 0;
+
+    // hotkey edge detection so a held key fires once
+    bool m_prevF11 = false;
+    bool m_prevF12 = false;
+
+    // set when the user asks for a screenshot, cleared once the frame is saved
+    bool m_screenshotRequested = false;
 
     float m_fpsAccum = 0.0f;
     int m_fpsSamples = 0;

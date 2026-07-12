@@ -79,6 +79,12 @@ void ui::ControlPanel::draw()
     // gain slider, range 0.0 to 4.0
     ImGui::SliderFloat("Gain", &m_app.audioGain, 0.0f, 4.0f);
 
+    // fullscreen toggle, mirrors the F11 hotkey
+    if (ImGui::Button("Fullscreen (F11)"))
+    {
+        m_app.toggleFullscreen();
+    }
+
     ImGui::Separator();
 
     // audio input source selector, embedded in the same panel
